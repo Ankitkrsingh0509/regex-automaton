@@ -1,0 +1,4370 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Regex → Automaton | ε-NFA · NFA · DFA · Minimization</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;500;700&display=swap');
+
+@font-face {
+  font-family: 'HighAsterisk';
+  src: local('Arial'), local('Helvetica'), local('system-ui'), local('sans-serif');
+  unicode-range: U+002A;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #f5efe6;
+  --surface: rgba(245, 239, 230, 0.85);
+  --surface2: rgba(240, 232, 220, 0.9);
+  --surface3: rgba(230, 220, 205, 0.9);
+  --border: rgba(139, 115, 85, 0.2);
+  --border2: rgba(139, 115, 85, 0.35);
+  --text: #3c3228;
+  --text2: #6b5a48;
+  --text3: #8b7a66;
+  --accent: #b84b22;
+  --accent2: #d66436;
+  --green: #2d7a3e;
+  --green2: #1e5c2b;
+  --green-bg: rgba(45, 122, 62, 0.15);
+  --red: #c9302c;
+  --red-bg: rgba(201, 48, 44, 0.15);
+  --amber: #a66a1a;
+  --amber-bg: rgba(166, 106, 26, 0.15);
+  --cyan: #1b7e87;
+  --cyan-bg: rgba(27, 126, 135, 0.15);
+  --purple: #7b2d8e;
+  --purple-bg: rgba(123, 45, 142, 0.15);
+  --indigo: #4a3d8f;
+  --indigo-bg: rgba(74, 61, 143, 0.15);
+  --mono: 'HighAsterisk', 'JetBrains Mono', monospace;
+  --sans: 'Lora', serif;
+  --display: 'Lora', serif;
+}
+
+body {
+  background: #fcf7ee;
+  background-image: radial-gradient(circle at 50% -20%, rgba(210,153,34,0.16), transparent 70%),
+                    radial-gradient(circle at 0% 100%, rgba(184,75,34,0.1), transparent 50%),
+                    linear-gradient(180deg, rgba(255,255,255,0.55), rgba(245,236,223,0.48));
+  color: var(--text);
+  font-family: var(--sans);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.build-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.btn-build {
+  max-width: 126px;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  transition: max-width 0.32s cubic-bezier(0.16, 1, 0.3, 1),
+              padding 0.32s cubic-bezier(0.16, 1, 0.3, 1),
+              opacity 0.24s ease,
+              margin 0.32s cubic-bezier(0.16, 1, 0.3, 1),
+              transform 0.2s ease;
+}
+.regex-floating-box.build-collapsed .btn-build {
+  max-width: 0;
+  padding-left: 0;
+  padding-right: 0;
+  opacity: 0;
+  margin-right: -10px;
+  pointer-events: none;
+  box-shadow: none;
+}
+.build-toggle-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  border: 1px solid var(--border2);
+  background: linear-gradient(180deg, rgba(255, 251, 245, 0.98), rgba(234, 220, 200, 0.96));
+  color: var(--accent);
+  font-family: var(--mono);
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.24s ease, box-shadow 0.24s ease, border-color 0.24s ease, color 0.24s ease;
+  box-shadow: 0 8px 18px rgba(123, 77, 38, 0.12);
+}
+.build-toggle-btn:hover {
+  transform: translateY(-1px);
+  border-color: rgba(184, 75, 34, 0.45);
+  box-shadow: 0 12px 24px rgba(123, 77, 38, 0.18);
+}
+
+.glass {
+  background: var(--surface);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--border);
+}
+
+/* Layout */
+.app {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  overflow: hidden;
+  width: 100vw;
+}
+
+.floating-logo {
+  position: absolute;
+  top: 24px;
+  left: 24px;
+  z-index: 50;
+  pointer-events: auto;
+  background: var(--surface);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--border);
+  padding: 8px 16px;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(139, 115, 85, 0.15);
+}
+.logo {
+  font-family: var(--display);
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.logo span { color: var(--accent); font-weight: 400; }
+
+/* Sidebar */
+.sidebar {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 420px;
+  background: var(--surface2);
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  box-shadow: -4px 0 24px rgba(139, 115, 85, 0.15);
+  z-index: 100;
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.sidebar.collapsed { transform: translateX(100%); }
+.sidebar-toggle {
+  position: absolute;
+  left: -32px;
+  top: 20px;
+  width: 32px;
+  height: 32px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-right: none;
+  border-radius: 6px 0 0 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--text2);
+  box-shadow: -4px 0 12px rgba(139, 115, 85, 0.1);
+  z-index: 101;
+}
+
+/* Floating Top Bar */
+.floating-top-bar {
+  position: absolute;
+  top: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  z-index: 50;
+  align-items: center;
+  pointer-events: none;
+}
+.floating-top-bar > * { pointer-events: auto; }
+
+.regex-floating-box {
+  background: linear-gradient(180deg, rgba(253, 249, 242, 0.96), rgba(242, 232, 216, 0.94));
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--border);
+  padding: 10px;
+  border-radius: 16px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  box-shadow: 0 18px 46px rgba(139, 115, 85, 0.18);
+  width: min(620px, calc(100vw - 32px));
+  transition: box-shadow 0.24s ease, border-color 0.24s ease;
+}
+.regex-floating-box:focus-within {
+  border-color: rgba(184, 75, 34, 0.4);
+  box-shadow: 0 20px 52px rgba(139, 115, 85, 0.2);
+}
+
+.panel {
+  padding: 20px;
+  border-bottom: 1px solid var(--border);
+}
+.panel-title {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--text2);
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Input area */
+.regex-input {
+  flex: 1;
+  background: rgba(255, 250, 243, 0.82);
+  border: 1px solid var(--border2);
+  border-radius: 10px;
+  padding: 11px 14px;
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 15px;
+  outline: none;
+  transition: all 0.2s ease;
+  box-shadow: inset 0 2px 4px rgba(0,0,0,0.06);
+}
+.regex-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(184,75,34,0.14), inset 0 2px 4px rgba(0,0,0,0.08); }
+.regex-input.error { border-color: var(--red); box-shadow: 0 0 0 3px rgba(248,81,73,0.2); }
+
+.btn {
+  background: linear-gradient(180deg, #cc6c3f, #b84b22);
+  color: #f5efe6;
+  border: none;
+  border-radius: 10px;
+  padding: 0 18px;
+  font-family: var(--sans);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 12px 22px rgba(184,75,34,0.2);
+}
+.btn:hover { background: linear-gradient(180deg, #d87848, #c15728); transform: translateY(-1px); box-shadow: 0 16px 28px rgba(184,75,34,0.26); }
+.btn:active { transform: translateY(0); }
+.btn-sm { padding: 6px 14px; font-size: 13px; border-radius: 4px; }
+.btn-outline {
+  background: transparent;
+  border: 1px solid var(--border2);
+  color: var(--text);
+  box-shadow: none;
+}
+.btn-outline:hover { background: var(--surface3); border-color: var(--text2); box-shadow: none; transform: none; }
+.btn-green { background: var(--green2); color: #fff; box-shadow: 0 2px 8px rgba(46,160,67,0.2); }
+.btn-green:hover { background: var(--green); box-shadow: 0 4px 12px rgba(46,160,67,0.3); }
+
+.error-msg {
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--red);
+  font-weight: 500;
+  min-height: 18px;
+}
+
+/* Examples */
+.examples { display: flex; flex-wrap: wrap; gap: 8px; }
+.example-chip {
+  background: rgba(139, 115, 85, 0.15);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 4px 12px;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text2);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.example-chip:hover { border-color: var(--accent); color: var(--accent); background: rgba(184,75,34,0.08); }
+
+/* SB Master Tabs */
+.sb-tab-bar {
+  display: flex;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  padding: 0 4px;
+  gap: 2px;
+}
+.sb-tab-btn {
+  flex: 1;
+  padding: 12px 4px;
+  border: none;
+  background: transparent;
+  color: var(--text2);
+  font-family: var(--sans);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+.sb-tab-btn.active {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+}
+.sb-tab-btn:hover:not(.active) { color: var(--text); }
+
+.sb-pane { display: none; flex-direction: column; overflow-y: auto; flex: 1; }
+.sb-pane.active { display: flex; }
+
+/* Pipeline Strip */
+.pipeline-strip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 12px;
+  background: var(--surface);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  box-shadow: 0 8px 24px rgba(139, 115, 85, 0.2);
+  z-index: 50;
+  flex-wrap: wrap;
+  gap: 2px;
+}
+.pipe-step { display: flex; align-items: center; }
+.pipe-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: 20px;
+  border: 1px solid var(--border2);
+  background: var(--surface2);
+  color: var(--text2);
+  font-family: var(--sans);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  white-space: nowrap;
+}
+.pipe-btn .pipe-num {
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.1);
+  color: var(--text2);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 10px;
+  transition: all 0.3s;
+}
+.pipe-btn:hover:not(.pipe-active) { border-color: var(--text); color: var(--text); }
+.pipe-btn.pipe-active {
+  background: rgba(184,75,34,0.12);
+  border-color: var(--accent);
+  color: var(--accent);
+  box-shadow: 0 0 16px rgba(184,75,34,0.15);
+}
+.pipe-btn.pipe-active .pipe-num { background: var(--accent); color: #f5efe6; }
+.pipe-btn.pipe-done { border-color: var(--green); color: var(--green); background: var(--green-bg); }
+.pipe-btn.pipe-done .pipe-num { background: var(--green); color: #f5efe6; }
+.pipe-arrow {
+  width: 20px;
+  height: 2px;
+  background: var(--border2);
+  position: relative;
+  margin: 0 2px;
+  transition: background 0.3s;
+}
+.pipe-arrow::after {
+  content: '';
+  position: absolute;
+  right: -2px; top: -3px;
+  border-left: 5px solid var(--border2);
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  transition: border-left-color 0.3s;
+}
+.pipe-arrow.pipe-done-arrow { background: var(--green); }
+.pipe-arrow.pipe-done-arrow::after { border-left-color: var(--green); }
+
+/* Tabs */
+.tabs {
+  display: flex;
+  background: rgba(139, 115, 85, 0.15);
+  border-radius: 6px;
+  padding: 4px;
+  border: 1px solid var(--border);
+}
+.tab {
+  flex: 1;
+  padding: 6px 12px;
+  border-radius: 4px;
+  border: none;
+  background: transparent;
+  color: var(--text2);
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.tab.active {
+  background: var(--surface3);
+  color: var(--text);
+  box-shadow: 0 2px 8px rgba(139, 115, 85, 0.15);
+}
+
+/* Simulate */
+.sim-row { display: flex; gap: 8px; margin-bottom: 12px; }
+.sim-input {
+  flex: 1; background: rgba(139, 115, 85, 0.15); border: 1px solid var(--border2);
+  border-radius: 6px; padding: 8px 12px; color: var(--text); font-family: var(--mono);
+  font-size: 14px; outline: none; transition: all 0.2s;
+}
+.sim-input:focus { border-color: var(--green); box-shadow: 0 0 0 2px rgba(46,160,67,0.2); }
+.sim-result {
+  display: flex; align-items: center; gap: 10px; padding: 12px; border-radius: 6px;
+  font-size: 14px; font-weight: 500;
+}
+.sim-accept { background: var(--green-bg); color: var(--green); border: 1px solid rgba(46,160,67,0.3); }
+.sim-reject { background: var(--red-bg); color: var(--red); border: 1px solid rgba(248,81,73,0.3); }
+.sim-dot { width: 8px; height: 8px; border-radius: 50%; box-shadow: 0 0 8px currentColor; }
+.sim-accept .sim-dot { background: var(--green); }
+.sim-reject .sim-dot { background: var(--red); }
+
+/* Stats */
+.stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.stat-card {
+  background: rgba(139, 115, 85, 0.1); border: 1px solid var(--border);
+  border-radius: 6px; padding: 12px;
+}
+.stat-label { font-size: 10px; color: var(--text2); font-weight: 600; letter-spacing: 0.5px; opacity: 0.8; margin-bottom: 6px; }
+.stat-value { font-size: 24px; font-weight: 700; color: var(--text); font-family: var(--mono); }
+.stat-value.accent { color: var(--accent); }
+.stat-value.green { color: var(--green); }
+
+/* Transition Table */
+.trans-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 13px; font-family: var(--mono); }
+.trans-table th { text-align: left; padding: 8px 12px; color: var(--text2); background: rgba(139, 115, 85, 0.25); font-weight: 600; border-bottom: 1px solid var(--border); }
+.trans-table td { padding: 8px 12px; color: var(--text); border-bottom: 1px solid var(--border); }
+.trans-table tr:hover td { background: rgba(255,255,255,0.03); }
+.trans-table tr:last-child td { border-bottom: none; }
+.start-state { color: var(--amber) !important; font-weight: 700; }
+.accept-state { color: var(--green) !important; font-weight: 700; }
+.table-wrap { max-height: 240px; overflow-y: auto; border: 1px solid var(--border); border-radius: 6px; background: rgba(139, 115, 85, 0.1); }
+
+/* Canvas Area */
+.canvas-area {
+  flex: 1; width: 100%; display: flex; flex-direction: column; overflow: hidden; position: relative;
+}
+.canvas-toolbar {
+  position: absolute; bottom: 24px; right: 444px; padding: 12px 24px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); backdrop-filter: blur(12px); display: flex; align-items: center; gap: 12px; z-index: 10; box-shadow: 0 8px 32px rgba(139, 115, 85, 0.2); transition: right 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.sidebar.collapsed ~ .canvas-area .canvas-toolbar { right: 24px; }
+.canvas-label { font-size: 12px; font-weight: 700; color: var(--text2); letter-spacing: 1px; }
+.mode-badge { padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 600; font-family: var(--mono); }
+.badge-enfa { background: var(--amber-bg); color: var(--amber); border: 1px solid rgba(210,153,34,0.3); }
+.badge-nfa { background: rgba(184,75,34,0.12); color: var(--accent); border: 1px solid rgba(184,75,34,0.3); }
+.badge-dfa { background: var(--cyan-bg); color: var(--cyan); border: 1px solid rgba(57,197,207,0.3); }
+.badge-mindfa-eq { background: var(--purple-bg); color: var(--purple); border: 1px solid rgba(123,45,142,0.3); }
+.badge-mindfa-my { background: var(--indigo-bg); color: var(--indigo); border: 1px solid rgba(74,61,143,0.3); }
+
+#main-canvas {
+  flex: 1; width: 100%; cursor: grab; background: transparent;
+  background-image: 
+    linear-gradient(rgba(139, 115, 85, 0.1) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(139, 115, 85, 0.1) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+#main-canvas:active { cursor: grabbing; }
+
+.empty-state { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; pointer-events: none; }
+.empty-icon { width: 80px; height: 80px; border-radius: 16px; background: rgba(255,255,255,0.02); border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; margin-bottom: 20px; font-size: 32px; color: var(--text3); box-shadow: 0 8px 32px rgba(139, 115, 85, 0.4); font-family: var(--mono); }
+.empty-title { font-size: 18px; font-weight: 600; color: var(--text); margin-bottom: 8px; }
+.empty-sub { font-size: 14px; color: var(--text2); }
+
+/* Props */
+.props-list { display: flex; flex-direction: column; gap: 8px; }
+.prop-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px dashed var(--border); font-size: 13px; }
+.prop-key { color: var(--text2); font-weight: 500; font-size: 12px; }
+.prop-val { color: var(--text); font-weight: 600; font-family: var(--mono); box-shadow: 0 0 8px rgba(255,255,255,0.05); background: rgba(255,255,255,0.05); padding: 2px 8px; border-radius: 4px; }
+.prop-val.yes { color: var(--green); background: var(--green-bg); }
+.prop-val.no { color: var(--red); background: var(--red-bg); }
+
+.howto { display: flex; flex-direction: column; gap: 12px; }
+.howto-item { display: flex; gap: 12px; font-size: 13px; color: var(--text2); line-height: 1.5; }
+.howto-sym { min-width: 40px; display: flex; justify-content: center; align-items: center; }
+
+/* Scrollbars */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text3); }
+
+/* Steps */
+.step-card {
+  background: rgba(139, 115, 85, 0.15);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 12px;
+  transition: all 0.2s ease;
+}
+.step-card:hover { border-color: var(--border2); box-shadow: 0 4px 12px rgba(139, 115, 85, 0.15); }
+.step-card.highlight { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent), 0 4px 16px rgba(184,75,34,0.15); background: rgba(184,75,34,0.05); }
+.step-card.highlight-green { border-color: var(--green); box-shadow: 0 0 0 1px var(--green), 0 4px 16px rgba(45,122,62,0.15); background: rgba(45,122,62,0.05); }
+.step-card.highlight-purple { border-color: var(--purple); box-shadow: 0 0 0 1px var(--purple), 0 4px 16px rgba(123,45,142,0.15); background: rgba(123,45,142,0.05); }
+.step-card.highlight-indigo { border-color: var(--indigo); box-shadow: 0 0 0 1px var(--indigo), 0 4px 16px rgba(74,61,143,0.15); background: rgba(74,61,143,0.05); }
+
+.step-label { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 6px; display: flex; align-items: center; gap: 8px; }
+.step-desc { font-size: 13px; color: var(--text2); line-height: 1.5; margin-bottom: 12px; }
+.svg-container {
+  background: rgba(255,255,255,0.02);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 12px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  overflow: hidden;
+}
+
+.thompson-tabs { display: flex; gap: 4px; margin-bottom: 16px; background: rgba(139, 115, 85, 0.15); padding: 4px; border-radius: 6px; }
+.thompson-tab { flex: 1; text-align: center; padding: 6px; border-radius: 4px; font-size: 12px; font-weight: 500; color: var(--text2); background: transparent; border: none; cursor: pointer; transition: all 0.2s; }
+.thompson-tab.active { background: var(--surface3); color: var(--text); }
+.thompson-code { font-family: var(--mono); font-size: 13px; color: var(--accent); background: rgba(184,75,34,0.08); padding: 8px 12px; border-radius: 6px; border: 1px solid rgba(184,75,34,0.15); margin-top: 8px; word-break: break-all; }
+
+.algo-explain {
+  background: rgba(184,75,34,0.05); border-left: 3px solid var(--accent);
+  padding: 12px 16px; border-radius: 0 6px 6px 0; font-size: 13px; color: var(--text); line-height: 1.5;
+  margin-bottom: 16px;
+}
+.algo-explain b { color: var(--accent); }
+.algo-explain.green-explain { background: rgba(45,122,62,0.05); border-left-color: var(--green); }
+.algo-explain.green-explain b { color: var(--green); }
+.algo-explain.purple-explain { background: rgba(123,45,142,0.05); border-left-color: var(--purple); }
+.algo-explain.purple-explain b { color: var(--purple); }
+.algo-explain.indigo-explain { background: rgba(74,61,143,0.05); border-left-color: var(--indigo); }
+.algo-explain.indigo-explain b { color: var(--indigo); }
+
+.min-partitions { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+.min-partition-row { display: flex; align-items: flex-start; gap: 12px; }
+.min-part-label { font-size: 13px; font-weight: 600; color: var(--text); margin-top: 4px; min-width: 24px; }
+.min-part-group { display: flex; flex-wrap: wrap; gap: 6px; background: rgba(139, 115, 85, 0.15); padding: 8px; border-radius: 6px; border: 1px solid var(--border); flex: 1; }
+.min-state-tag { background: rgba(255,255,255,0.05); border: 1px solid var(--border2); border-radius: 4px; padding: 2px 8px; font-family: var(--mono); font-size: 12px; color: var(--text2); }
+.min-state-tag.accepting { border-color: var(--green); color: var(--green); background: var(--green-bg); }
+
+.comparison-box { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1px; background: var(--border); border-radius: 8px; overflow: hidden; margin-bottom: 16px; border: 1px solid var(--border); }
+.cmp-col { background: var(--surface2); padding: 16px 12px; text-align: center; }
+.cmp-label { font-size: 11px; font-weight: 600; color: var(--text2); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
+.cmp-val { font-size: 28px; font-weight: 700; font-family: var(--mono); color: var(--text); }
+.cmp-val.reduced { color: var(--green); }
+
+/* Myhill Table */
+.myhill-table-wrap { overflow-x: auto; margin-top: 12px; }
+.myhill-table { border-collapse: collapse; font-family: var(--mono); font-size: 11px; }
+.myhill-table th, .myhill-table td { 
+  width: 34px; height: 34px; text-align: center; vertical-align: middle;
+  border: 1px solid var(--border); padding: 2px;
+}
+.myhill-table th { background: rgba(139,115,85,0.2); color: var(--text2); font-weight: 600; }
+.myhill-table td.marked { background: rgba(201,48,44,0.12); color: var(--red); font-weight: 700; }
+.myhill-table td.unmarked { background: rgba(45,122,62,0.1); color: var(--green); font-weight: 600; }
+.myhill-table td.na { background: rgba(139,115,85,0.08); color: var(--border2); }
+
+/* Legend */
+.legend { position: absolute; bottom: 24px; right: 24px; background: var(--surface); backdrop-filter: blur(12px); border: 1px solid var(--border); border-radius: 8px; padding: 16px; display: flex; flex-direction: column; gap: 10px; box-shadow: 0 8px 32px rgba(139, 115, 85, 0.20); }
+.legend-item { display: flex; align-items: center; gap: 12px; font-size: 13px; color: var(--text); }
+.legend-dot { width: 20px; height: 20px; border-radius: 50%; border: 2px solid; flex-shrink: 0; opacity: 0.8; }
+.ld-start { border-color: var(--amber); background: var(--amber-bg); color: var(--amber); }
+.ld-accept { border-color: var(--green); background: var(--green-bg); color: var(--green); }
+.ld-normal { border-color: var(--text2); background: rgba(255,255,255,0.05); color: transparent; }
+
+/* Hand draw */
+.hand-instructions { background: rgba(139, 115, 85, 0.15); border-radius: 6px; padding: 12px; margin-bottom: 12px; }
+.hand-tip { font-size: 12px; color: var(--text2); margin-bottom: 6px; display: flex; align-items: center; gap: 8px; }
+.hand-tip:last-child { margin-bottom: 0; }
+.hand-tip-key { background: rgba(255,255,255,0.1); border-radius: 4px; padding: 2px 6px; font-family: var(--mono); font-size: 11px; color: var(--text); }
+#hand-prompt-overlay { position: absolute; inset: 0; background: rgba(13,17,23,0.8); backdrop-filter: blur(8px); display: flex; align-items: center; justify-content: center; z-index: 50; }
+.hand-prompt-box { background: var(--surface2); border: 1px solid var(--border2); border-radius: 12px; padding: 24px; min-width: 320px; box-shadow: 0 16px 48px rgba(139, 115, 85, 0.4); }
+.hand-prompt-title { font-size: 18px; font-weight: 600; color: var(--text); margin-bottom: 8px; }
+.hand-prompt-input { width: 100%; background: rgba(139, 115, 85, 0.25); border: 1px solid var(--border); border-radius: 6px; padding: 10px 14px; font-size: 16px; font-family: var(--mono); color: var(--text); margin: 12px 0 20px; outline: none; }
+.hand-prompt-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(184,75,34,0.15); }
+
+/* Closure detail */
+.closure-detail {
+  background: rgba(139,115,85,0.08);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px;
+  margin-top: 8px;
+  font-size: 12px;
+  font-family: var(--mono);
+  color: var(--text2);
+  line-height: 1.6;
+}
+.closure-detail .cl-step { margin-bottom: 4px; }
+.closure-detail .cl-highlight { color: var(--accent); font-weight: 600; }
+
+.explain-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.explain-hero {
+  background: linear-gradient(160deg, rgba(255, 250, 243, 0.96), rgba(239, 225, 206, 0.92));
+  border: 1px solid rgba(184, 75, 34, 0.18);
+  border-radius: 16px;
+  padding: 18px;
+  box-shadow: 0 10px 26px rgba(139, 115, 85, 0.1);
+}
+.explain-kicker {
+  font-size: 10px;
+  letter-spacing: 1.8px;
+  text-transform: uppercase;
+  color: var(--accent);
+  font-family: var(--mono);
+  margin-bottom: 8px;
+}
+.explain-title {
+  font-size: 24px;
+  line-height: 1.15;
+  margin-bottom: 8px;
+}
+.explain-copy {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text2);
+}
+.teach-path {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 10px;
+  margin-top: 16px;
+}
+.teach-pill {
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  padding: 8px 10px;
+  background: rgba(255, 252, 247, 0.72);
+  font-size: 11px;
+  color: var(--text2);
+  font-family: var(--mono);
+  text-align: center;
+}
+.teach-pill strong {
+  display: block;
+  color: var(--text);
+  font-size: 13px;
+  margin-bottom: 3px;
+}
+.chalk-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+.chalk-card {
+  background: rgba(255, 251, 244, 0.78);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px;
+}
+.chalk-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 6px;
+}
+.chalk-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+}
+.formula-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(184, 75, 34, 0.08);
+  border: 1px solid rgba(184, 75, 34, 0.16);
+  color: var(--accent);
+  font-family: var(--mono);
+  font-size: 11px;
+}
+.chalk-copy {
+  font-size: 12px;
+  color: var(--text2);
+  line-height: 1.55;
+  margin-bottom: 10px;
+}
+.chalk-diagram {
+  background: rgba(248, 241, 231, 0.8);
+  border-radius: 10px;
+  border: 1px solid rgba(139, 115, 85, 0.16);
+  padding: 10px;
+}
+.explain-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.explain-card {
+  background: rgba(255, 251, 245, 0.82);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px;
+}
+.explain-card.highlight {
+  border-color: rgba(184, 75, 34, 0.28);
+  box-shadow: 0 0 0 1px rgba(184, 75, 34, 0.08);
+}
+.explain-card.green {
+  border-color: rgba(45, 122, 62, 0.22);
+}
+.explain-card.purple {
+  border-color: rgba(123, 45, 142, 0.24);
+}
+.explain-card.indigo {
+  border-color: rgba(74, 61, 143, 0.24);
+}
+.explain-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.explain-card-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+}
+.explain-card-copy {
+  font-size: 12px;
+  line-height: 1.58;
+  color: var(--text2);
+}
+.teach-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+.set-chip {
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(255, 248, 238, 0.92);
+  border: 1px solid rgba(139, 115, 85, 0.2);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 11px;
+}
+.set-chip.accept {
+  border-color: rgba(45, 122, 62, 0.32);
+  background: rgba(45, 122, 62, 0.08);
+  color: var(--green2);
+}
+.teach-note {
+  margin-top: 10px;
+  padding: 10px 12px;
+  background: rgba(255, 248, 238, 0.82);
+  border-left: 3px solid var(--accent);
+  border-radius: 0 10px 10px 0;
+  font-size: 12px;
+  color: var(--text2);
+}
+.teach-columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+.teach-column {
+  background: rgba(248, 241, 231, 0.8);
+  border: 1px solid rgba(139, 115, 85, 0.16);
+  border-radius: 10px;
+  padding: 12px;
+}
+.teach-column h4 {
+  font-size: 11px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--text3);
+  margin-bottom: 8px;
+}
+.teach-column .stack {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.explain-empty {
+  text-align: center;
+  padding: 36px 20px;
+  color: var(--text3);
+}
+.explain-empty .big {
+  font-size: 30px;
+  font-family: var(--display);
+  margin-bottom: 8px;
+}
+
+@media (max-width: 900px) {
+  .canvas-toolbar {
+    right: 24px;
+    left: 24px;
+    width: auto;
+    justify-content: space-between;
+    flex-wrap: wrap;
+  }
+  .legend {
+    bottom: 96px;
+  }
+}
+
+@media (max-width: 720px) {
+  .floating-logo {
+    position: static;
+    margin: 16px auto 0;
+  }
+  .app {
+    flex-direction: column;
+  }
+  .floating-top-bar {
+    position: static;
+    transform: none;
+    padding: 16px;
+  }
+  .sidebar {
+    position: relative;
+    width: 100%;
+    height: auto;
+    border-left: none;
+    border-top: 1px solid var(--border);
+  }
+  .sidebar-toggle {
+    display: none;
+  }
+  .canvas-toolbar {
+    bottom: 16px;
+  }
+  .legend {
+    display: none !important;
+  }
+}
+</style>
+</head>
+<body>
+
+<div class="app">
+  <div class="floating-logo">
+    <div class="logo">Regex <span>→</span> Automaton</div>
+    <div style="font-size:10px; color:var(--text2); margin-top:2px;">RE · ε-NFA · NFA · DFA · Minimization</div>
+  </div>
+
+  <div class="floating-top-bar">
+    <div class="regex-floating-box" id="regex-floating-box">
+      <input class="regex-input" id="regex-input" type="text" placeholder="e.g. (a|b)*abb" autocomplete="off" spellcheck="false">
+      <div class="build-controls">
+        <button class="btn btn-build" id="build-btn" onclick="buildAutomaton()">Build</button>
+        <button class="build-toggle-btn" id="build-toggle-btn" type="button" onclick="toggleBuildButton()" aria-label="Collapse build button" title="Retract or expand Build">‹</button>
+      </div>
+    </div>
+    <div class="error-msg" id="error-msg" style="background: rgba(255,255,255,0.85); backdrop-filter:blur(4px); padding: 4px 12px; border-radius: 4px; display:none; box-shadow: 0 2px 8px rgba(248,81,73,0.15)"></div>
+    <div id="formatted-regex-display" style="display:none; align-items:center; justify-content:center; background:var(--surface); border-radius:6px; font-family:var(--mono); font-size:22px; color:var(--text); letter-spacing:2px; border:1px solid var(--border); box-shadow: 0 4px 12px rgba(139, 115, 85, 0.15); padding: 6px 20px;"></div>
+    <!-- Pipeline progress strip -->
+    <div class="pipeline-strip">
+      <div class="pipe-step">
+        <button class="pipe-btn pipe-active" id="pipe-enfa" onclick="setMode('enfa')">
+          <span class="pipe-num">1</span>
+          <span>ε-NFA</span>
+        </button>
+      </div>
+      <div class="pipe-arrow" id="pipe-arrow-1"></div>
+      <div class="pipe-step">
+        <button class="pipe-btn" id="pipe-nfa" onclick="setMode('nfa')">
+          <span class="pipe-num">2</span>
+          <span>NFA</span>
+        </button>
+      </div>
+      <div class="pipe-arrow" id="pipe-arrow-2"></div>
+      <div class="pipe-step">
+        <button class="pipe-btn" id="pipe-dfa" onclick="setMode('dfa')">
+          <span class="pipe-num">3</span>
+          <span>DFA</span>
+        </button>
+      </div>
+      <div class="pipe-arrow" id="pipe-arrow-3"></div>
+      <div class="pipe-step">
+        <button class="pipe-btn" id="pipe-minequiv" onclick="setMode('minequiv')">
+          <span class="pipe-num">4</span>
+          <span>Equiv</span>
+        </button>
+      </div>
+      <div class="pipe-arrow" id="pipe-arrow-4"></div>
+      <div class="pipe-step">
+        <button class="pipe-btn" id="pipe-minmyhill" onclick="setMode('minmyhill')">
+          <span class="pipe-num">5</span>
+          <span>Myhill</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Sidebar -->
+  <div class="sidebar" id="sidebar">
+    <div class="sidebar-toggle" onclick="toggleSidebar()">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" id="sidebar-toggle-icon"><path d="M9 18l6-6-6-6"/></svg>
+    </div>
+
+    <div class="sb-tab-bar">
+      <button class="sb-tab-btn active" id="sbtab-build" onclick="switchSbTab('build')">Build</button>
+      <button class="sb-tab-btn" id="sbtab-steps" onclick="switchSbTab('steps')">Steps</button>
+      <button class="sb-tab-btn" id="sbtab-analyze" onclick="switchSbTab('analyze')">Analyze</button>
+      <button class="sb-tab-btn" id="sbtab-explain" onclick="switchSbTab('explain')">Explain</button>
+      <button class="sb-tab-btn" id="sbtab-learn" onclick="switchSbTab('learn')">Learn</button>
+    </div>
+
+    <!-- ══ PANE 1: BUILD ══ -->
+    <div class="sb-pane active" id="sbpane-build">
+
+      <div class="panel">
+        <div class="panel-title">Examples</div>
+        <div class="examples">
+          <span class="example-chip" onclick="loadExample('(a|b)*abb')">(a|b)*abb</span>
+          <span class="example-chip" onclick="loadExample('a*b*')">a*b*</span>
+          <span class="example-chip" onclick="loadExample('(a|b)*')">(a|b)*</span>
+          <span class="example-chip" onclick="loadExample('ab|cd')">ab|cd</span>
+          <span class="example-chip" onclick="loadExample('a(b|c)*d')">a(b|c)*d</span>
+          <span class="example-chip" onclick="loadExample('(0|1)*101')">(0|1)*101</span>
+          <span class="example-chip" onclick="loadExample('a+b?c')">a+b?c</span>
+        </div>
+      </div>
+
+      <!-- HAND-DRAW PANEL -->
+      <div class="panel" id="hand-panel">
+        <div class="panel-title" style="display:flex;align-items:center;justify-content:space-between">
+          <span>Build by Hand</span>
+          <div class="tabs" style="padding:2px;gap:0;border-radius:2px;border:1px solid var(--border)">
+            <button class="tab active" id="hand-tab-off" style="padding:3px 10px;font-size:10px" onclick="setHandMode(false)">Off</button>
+            <button class="tab" id="hand-tab-on" style="padding:3px 10px;font-size:10px" onclick="setHandMode(true)">Draw</button>
+          </div>
+        </div>
+        <div id="hand-controls" style="display:none;margin-top:10px">
+          <div class="hand-instructions">
+            <div class="hand-tip"><span class="hand-tip-key">Click</span> empty canvas → add state</div>
+            <div class="hand-tip"><span class="hand-tip-key">Drag</span> state → state → add transition</div>
+            <div class="hand-tip"><span class="hand-tip-key">Double-click</span> state → toggle accept</div>
+            <div class="hand-tip"><span class="hand-tip-key">Right-click</span> state → delete</div>
+          </div>
+          <div id="hand-selected-panel" style="display:none;margin:10px 0 0">
+            <div style="font-size:10px;color:var(--text3);font-family:var(--mono);letter-spacing:1px;text-transform:uppercase;margin-bottom:6px">Selected: <span id="hand-sel-label" style="color:var(--accent)"></span></div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap">
+              <button class="btn btn-outline btn-sm" onclick="handToggleStart()">Toggle Start</button>
+              <button class="btn btn-outline btn-sm" onclick="handToggleAccept()">Toggle Accept</button>
+              <button class="btn btn-sm" style="background:var(--red);border-color:var(--red);color:#f5efe0;font-family:var(--mono)" onclick="handDeleteSelected()">Delete</button>
+            </div>
+          </div>
+          <div style="display:flex;gap:6px;margin-top:10px">
+            <button class="btn btn-outline btn-sm" onclick="handClear()">Clear All</button>
+            <button class="btn btn-green btn-sm" style="flex:1" onclick="handConvertToRegex()">▶ Convert to Regex</button>
+          </div>
+          <div id="hand-result" style="display:none;margin-top:10px">
+            <div style="font-size:9px;color:var(--text3);font-family:var(--mono);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:6px;padding-bottom:4px;border-bottom:1px solid var(--border)">Derived Regular Expression</div>
+            <div id="hand-regex-output" style="font-family:var(--mono);font-size:13px;color:var(--accent);padding:9px 10px;background:#fdf8ef;border:1px solid var(--border2);border-radius:3px;word-break:break-all;line-height:1.5;min-height:32px"></div>
+            <button class="btn btn-sm" style="margin-top:6px;width:100%;font-family:var(--mono);font-size:11px" onclick="handLoadIntoBuilder()">Load into Builder & Visualize →</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">How to Read</div>
+        <div class="howto">
+          <div class="howto-item">
+            <div class="howto-sym"><div class="legend-dot ld-start" style="width:14px;height:14px;border-width:2px;display:inline-block;vertical-align:middle"></div> <span style="color:var(--amber);font-family:var(--mono);font-size:11px">→</span></div>
+            <div class="howto-desc">Start state — where computation begins</div>
+          </div>
+          <div class="howto-item">
+            <div class="howto-sym"><div class="legend-dot ld-accept" style="width:14px;height:14px;border-width:2px;display:inline-block;vertical-align:middle"></div> <span style="color:var(--green2);font-family:var(--mono);font-size:11px">◎</span></div>
+            <div class="howto-desc">Accept state — double ring, string accepted if ends here</div>
+          </div>
+          <div class="howto-item">
+            <div class="howto-sym" style="font-family:var(--mono);font-size:12px;color:var(--text3)">ε</div>
+            <div class="howto-desc">Epsilon — free transition, no input consumed (NFA only)</div>
+          </div>
+          <div class="howto-item">
+            <div class="howto-sym" style="font-family:var(--mono);font-size:12px;color:var(--text2)">a,b</div>
+            <div class="howto-desc">Multiple labels on one arrow — transitions on either symbol</div>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /sb-pane build -->
+
+    <!-- ══ PANE 2: STEPS ══ -->
+    <div class="sb-pane" id="sbpane-steps">
+
+      <div class="panel" id="steps-guide-panel" style="display:none">
+        <div class="panel-title">Guided Walkthrough <span style="font-weight:400;color:var(--text3)">picture-style explanation</span></div>
+        <div id="steps-guide-content" class="explain-shell"></div>
+      </div>
+
+      <div class="panel" id="thompson-panel" style="display:none">
+        <div class="panel-title">① Thompson Construction <span style="font-weight:400;color:var(--text3)">ε-NFA</span></div>
+        <div class="thompson-tabs">
+          <button class="thompson-tab active" onclick="switchThompsonTab('overview')">Overview</button>
+          <button class="thompson-tab" onclick="switchThompsonTab('operators')">Operators</button>
+        </div>
+        <div id="thompson-overview" class="thompson-steps"></div>
+        <div id="thompson-operators" style="display:none" class="thompson-steps"></div>
+      </div>
+
+      <!-- ε-NFA → NFA Panel -->
+      <div class="panel" id="enfa-to-nfa-panel" style="display:none">
+        <div class="panel-title">② ε-NFA → NFA <span style="font-weight:400;color:var(--text3)">(ε-Elimination)</span></div>
+        <div class="algo-explain">
+          <b>Algorithm:</b> For each state, compute its <b>ε-closure</b>. For each symbol <i>a</i> in the alphabet and each state <i>q</i>, the new NFA transition δ'(q, a) = ε-closure(δ(ε-closure(q), a)). A state is <b>accepting</b> if its ε-closure contains any original accept state.
+        </div>
+        <div id="enfa-to-nfa-steps" style="display:flex;flex-direction:column;gap:8px;max-height:420px;overflow-y:auto"></div>
+      </div>
+
+      <!-- NFA → DFA Conversion Panel (Closure Method) -->
+      <div class="panel" id="conv-panel" style="display:none">
+        <div class="panel-title">③ NFA → DFA <span style="font-weight:400;color:var(--text3)">(Subset Construction / ε-Closure)</span></div>
+        <div class="algo-explain green-explain">
+          <b>Closure Method:</b> Starting from the ε-closure of the start state, for each DFA state (a set of NFA states) and each symbol, compute <b>move()</b> then <b>ε-closure()</b>. If a new set of NFA states is found, create a new DFA state. Repeat until no new states appear.
+        </div>
+        <div id="conv-steps" style="display:flex;flex-direction:column;gap:8px;max-height:420px;overflow-y:auto"></div>
+      </div>
+
+      <!-- Equivalence (Partition Refinement) Minimization Panel -->
+      <div class="panel" id="equiv-panel" style="display:none">
+        <div class="panel-title">④ Equivalence Method <span style="font-weight:400;color:var(--text3)">(Partition Refinement)</span></div>
+        <div class="algo-explain purple-explain">
+          <b>Equivalence Method:</b> Start with two partitions — <b>accepting</b> and <b>non-accepting</b> states. Repeatedly refine: two states in the same partition are split if they transition to <b>different partitions</b> on any symbol. When stable, each partition becomes one minimal-DFA state.
+        </div>
+        <div id="equiv-comparison" style="margin-bottom:10px;display:none"></div>
+        <div style="font-size:9px;color:var(--text3);font-family:var(--mono);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:8px;padding-bottom:4px;border-bottom:1px solid var(--border)">Partition Steps</div>
+        <div id="equiv-steps" style="display:flex;flex-direction:column;gap:8px;max-height:380px;overflow-y:auto"></div>
+      </div>
+
+      <!-- Myhill-Nerode Minimization Panel -->
+      <div class="panel" id="myhill-panel" style="display:none">
+        <div class="panel-title">⑤ Myhill-Nerode Method <span style="font-weight:400;color:var(--text3)">(Table-Filling)</span></div>
+        <div class="algo-explain indigo-explain">
+          <b>Myhill-Nerode Theorem:</b> Two states are <b>distinguishable</b> if one is accepting and the other is not, or if on some input symbol they transition to distinguishable states. Build a triangular table, mark distinguishable pairs. Unmarked pairs are <b>equivalent</b> and can be merged.
+        </div>
+        <div id="myhill-comparison" style="margin-bottom:10px;display:none"></div>
+        <div id="myhill-steps" style="display:flex;flex-direction:column;gap:8px;max-height:500px;overflow-y:auto"></div>
+      </div>
+
+      <div class="panel" id="steps-empty-msg" style="text-align:center;padding:32px 20px">
+        <div style="font-size:28px;font-family:var(--display);font-style:italic;color:var(--text3);margin-bottom:8px">∑</div>
+        <div style="font-size:13px;font-family:var(--display);font-style:italic;color:var(--text3)">No automaton built yet</div>
+        <div style="font-size:11px;color:var(--border2);font-family:var(--mono);margin-top:4px">Enter a regex in the Build tab</div>
+      </div>
+
+    </div><!-- /sb-pane steps -->
+
+    <!-- ══ PANE 3: ANALYZE ══ -->
+    <div class="sb-pane" id="sbpane-analyze">
+
+      <div class="panel" id="sim-panel">
+        <div class="panel-title">Simulate Input</div>
+        <div class="sim-row">
+          <input class="sim-input" id="sim-input" type="text" placeholder="test string…" autocomplete="off">
+          <button class="btn btn-green btn-sm" onclick="simulate()">Run</button>
+        </div>
+        <div id="sim-result" style="display:none"></div>
+      </div>
+
+      <div class="panel" id="stats-panel" style="display:none">
+        <div class="panel-title">Statistics</div>
+        <div class="stats-grid" id="stats-grid"></div>
+      </div>
+
+      <div class="panel" id="props-panel" style="display:none">
+        <div class="panel-title">Regex Properties</div>
+        <div id="props-list" class="props-list"></div>
+      </div>
+
+      <div class="panel" id="table-panel" style="display:none">
+        <div class="panel-title">Transition Table</div>
+        <div class="table-wrap">
+          <table class="trans-table" id="trans-table"></table>
+        </div>
+      </div>
+
+      <div class="panel" id="analyze-empty-msg" style="text-align:center;padding:32px 20px">
+        <div style="font-size:28px;font-family:var(--display);font-style:italic;color:var(--text3);margin-bottom:8px">∅</div>
+        <div style="font-size:13px;font-family:var(--display);font-style:italic;color:var(--text3)">Build an automaton first</div>
+        <div style="font-size:11px;color:var(--border2);font-family:var(--mono);margin-top:4px">Statistics appear after building</div>
+      </div>
+
+    </div><!-- /sb-pane analyze -->
+
+    <!-- ══ PANE 4: EXPLAIN ══ -->
+    <div class="sb-pane" id="sbpane-explain">
+      <div class="panel">
+        <div class="panel-title">Explain Like Class Notes</div>
+        <div id="explain-shell" class="explain-shell">
+          <div class="explain-empty" id="explain-empty-msg">
+            <div class="big">⊂</div>
+            <div style="font-size:14px;color:var(--text);margin-bottom:4px">Build a regex first</div>
+            <div style="font-size:12px;color:var(--text3);font-family:var(--mono)">This panel turns the full pipeline into warm step-by-step classroom notes.</div>
+          </div>
+          <div id="explain-content" style="display:none"></div>
+        </div>
+      </div>
+    </div><!-- /sb-pane explain -->
+
+    <!-- ══ PANE 5: LEARN ══ -->
+    <div class="sb-pane" id="sbpane-learn">
+      
+      <div class="panel">
+        <div class="panel-title">Automata Crash Course</div>
+        <div class="algo-explain" style="margin-bottom:0">
+          Learn the foundational algorithms of converting regular expressions to finite automata, exactly as taught on the whiteboard.
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">1. RegEx → ε-NFA (Thompson)</div>
+        <div class="step-desc">Standard building blocks combining smaller expressions using ε-transitions.</div>
+        
+        <div class="step-card" style="display:flex; flex-wrap:wrap; gap:16px;">
+          <div style="flex:1; min-width:140px;">
+            <div class="step-label" style="font-family:var(--mono)">ε (Epsilon)</div>
+            <div class="svg-container">
+              <svg width="100" height="40" viewBox="0 0 100 40">
+                <defs><marker id="l_arr0" viewBox="0 -3 6 6" refX="6" refY="0" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,-3L6,0L0,3" fill="#6b5a48"/></marker></defs>
+                <circle cx="20" cy="20" r="10" fill="none" stroke="#6b5a48" stroke-width="1.5"/>
+                <circle cx="80" cy="20" r="10" fill="none" stroke="#6b5a48" stroke-width="1.5"/>
+                <circle cx="80" cy="20" r="7" fill="none" stroke="#6b5a48" stroke-width="1"/>
+                <path d="M 30,20 L 65,20" stroke="#6b5a48" stroke-width="1.5" marker-end="url(#l_arr0)"/>
+                <text x="50" y="15" font-family="var(--mono)" font-size="10" fill="#a8895a" text-anchor="middle">ε</text>
+              </svg>
+            </div>
+          </div>
+          <div style="flex:1; min-width:140px;">
+            <div class="step-label" style="font-family:var(--mono)">a (Symbol)</div>
+            <div class="svg-container">
+              <svg width="100" height="40" viewBox="0 0 100 40">
+                <circle cx="20" cy="20" r="10" fill="none" stroke="#6b5a48" stroke-width="1.5"/>
+                <circle cx="80" cy="20" r="10" fill="none" stroke="#6b5a48" stroke-width="1.5"/>
+                <circle cx="80" cy="20" r="7" fill="none" stroke="#6b5a48" stroke-width="1"/>
+                <path d="M 30,20 L 65,20" stroke="#6b5a48" stroke-width="1.5" marker-end="url(#l_arr0)"/>
+                <text x="50" y="15" font-family="var(--mono)" font-size="12" fill="#b84b22" font-weight="bold" text-anchor="middle">a</text>
+              </svg>
+            </div>
+          </div>
+          
+          <div style="width:100%">
+            <div class="step-label" style="font-family:var(--mono)">a + b (Union)</div>
+            <div class="svg-container">
+              <svg width="220" height="90" viewBox="0 0 220 90">
+                <circle cx="20" cy="45" r="10" fill="none" stroke="#6b5a48" stroke-width="1.5"/>
+                <circle cx="80" cy="20" r="10" fill="none" stroke="#6b5a48" stroke-width="1.5"/>
+                <circle cx="140" cy="20" r="10" fill="none" stroke="#6b5a48" stroke-width="1.5"/>
+                <circle cx="80" cy="70" r="10" fill="none" stroke="#6b5a48" stroke-width="1.5"/>
+                <circle cx="140" cy="70" r="10" fill="none" stroke="#6b5a48" stroke-width="1.5"/>
+                <circle cx="200" cy="45" r="10" fill="none" stroke="#6b5a48" stroke-width="1.5"/>
+                <circle cx="200" cy="45" r="7" fill="none" stroke="#6b5a48" stroke-width="1"/>
+                <path d="M 27,38 L 73,25" stroke="#6b5a48" stroke-width="1.5" marker-end="url(#l_arr0)"/><text x="50" y="27" font-family="var(--mono)" font-size="10" fill="#a8895a">ε</text>
+                <path d="M 27,52 L 73,65" stroke="#6b5a48" stroke-width="1.5" marker-end="url(#l_arr0)"/><text x="50" y="66" font-family="var(--mono)" font-size="10" fill="#a8895a">ε</text>
+                <path d="M 90,20 L 125,20" stroke="#6b5a48" stroke-width="1.5" marker-end="url(#l_arr0)"/><text x="110" y="15" font-family="var(--mono)" font-size="12" fill="#b84b22" font-weight="bold">a</text>
+                <path d="M 90,70 L 125,70" stroke="#6b5a48" stroke-width="1.5" marker-end="url(#l_arr0)"/><text x="110" y="65" font-family="var(--mono)" font-size="12" fill="#b84b22" font-weight="bold">b</text>
+                <path d="M 147,25 L 193,38" stroke="#6b5a48" stroke-width="1.5" marker-end="url(#l_arr0)"/><text x="170" y="27" font-family="var(--mono)" font-size="10" fill="#a8895a">ε</text>
+                <path d="M 147,65 L 193,52" stroke="#6b5a48" stroke-width="1.5" marker-end="url(#l_arr0)"/><text x="170" y="66" font-family="var(--mono)" font-size="10" fill="#a8895a">ε</text>
+              </svg>
+            </div>
+          </div>
+          
+          <div style="width:100%">
+            <div class="step-label" style="font-family:var(--mono)">a · b (Concat)</div>
+            <div class="svg-container">
+              <svg width="220" height="40" viewBox="0 0 220 40">
+                <circle cx="20" cy="20" r="10" fill="none" stroke="#6b5a48" stroke-width="1.5"/>
+                <circle cx="80" cy="20" r="10" fill="none" stroke="#6b5a48" stroke-width="1.5"/>
+                <circle cx="140" cy="20" r="10" fill="none" stroke="#6b5a48" stroke-width="1.5"/>
+                <circle cx="200" cy="20" r="10" fill="none" stroke="#6b5a48" stroke-width="1.5"/>
+                <circle cx="200" cy="20" r="7" fill="none" stroke="#6b5a48" stroke-width="1"/>
+                <path d="M 30,20 L 65,20" stroke="#6b5a48" stroke-width="1.5" marker-end="url(#l_arr0)"/><text x="50" y="15" font-family="var(--mono)" font-size="12" fill="#b84b22" font-weight="bold">a</text>
+                <path d="M 90,20 L 125,20" stroke="#6b5a48" stroke-width="1.5" marker-end="url(#l_arr0)"/><text x="110" y="15" font-family="var(--mono)" font-size="10" fill="#a8895a" text-anchor="middle">ε</text>
+                <path d="M 150,20 L 185,20" stroke="#6b5a48" stroke-width="1.5" marker-end="url(#l_arr0)"/><text x="170" y="15" font-family="var(--mono)" font-size="12" fill="#b84b22" font-weight="bold">b</text>
+              </svg>
+            </div>
+          </div>
+          
+          <div style="width:100%">
+            <div class="step-label" style="font-family:var(--mono)">a* (Kleene)</div>
+            <div class="svg-container">
+              <svg width="220" height="80" viewBox="0 0 220 80">
+                <circle cx="20" cy="50" r="10" fill="none" stroke="#6b5a48" stroke-width="1.5"/>
+                <circle cx="80" cy="50" r="10" fill="none" stroke="#6b5a48" stroke-width="1.5"/>
+                <circle cx="140" cy="50" r="10" fill="none" stroke="#6b5a48" stroke-width="1.5"/>
+                <circle cx="200" cy="50" r="10" fill="none" stroke="#6b5a48" stroke-width="1.5"/>
+                <circle cx="200" cy="50" r="7" fill="none" stroke="#6b5a48" stroke-width="1"/>
+                
+                <path d="M 30,50 L 65,50" stroke="#6b5a48" stroke-width="1.5" marker-end="url(#l_arr0)"/><text x="50" y="45" font-family="var(--mono)" font-size="10" fill="#a8895a" text-anchor="middle">ε</text>
+                <path d="M 90,50 L 125,50" stroke="#6b5a48" stroke-width="1.5" marker-end="url(#l_arr0)"/><text x="110" y="45" font-family="var(--mono)" font-size="12" fill="#b84b22" font-weight="bold" text-anchor="middle">a</text>
+                <path d="M 150,50 L 185,50" stroke="#6b5a48" stroke-width="1.5" marker-end="url(#l_arr0)"/><text x="170" y="45" font-family="var(--mono)" font-size="10" fill="#a8895a" text-anchor="middle">ε</text>
+                
+                <path d="M 135,42 Q 110,15 85,42" stroke="#6b5a48" stroke-width="1.5" fill="none" marker-end="url(#l_arr0)"/><text x="110" y="25" font-family="var(--mono)" font-size="10" fill="#a8895a" text-anchor="middle">ε</text>
+                <path d="M 20,60 Q 110,95 200,60" stroke="#6b5a48" stroke-width="1.5" fill="none" marker-end="url(#l_arr0)"/><text x="110" y="80" font-family="var(--mono)" font-size="10" fill="#a8895a" text-anchor="middle">ε</text>
+              </svg>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">2. Direct NFA (No ε transitions)</div>
+        <div class="step-desc">Simplified diagrams for basic regular expressions, avoiding empty transitions where possible.</div>
+        <div class="step-card" style="display:flex; flex-wrap:wrap; gap:16px;">
+          
+          <div style="flex:1; min-width:110px;">
+            <div class="step-label" style="font-family:var(--mono)">a</div>
+            <div class="svg-container">
+              <svg width="120" height="40" viewBox="0 0 120 40">
+                <circle cx="30" cy="20" r="10" fill="none" stroke="#6b5a48" stroke-width="1.5"/>
+                <text x="30" y="23" font-family="var(--mono)" font-size="10" fill="#3c3228" text-anchor="middle">q0</text>
+                <circle cx="90" cy="20" r="10" fill="none" stroke="#6b5a48" stroke-width="1.5"/>
+                <circle cx="90" cy="20" r="7" fill="none" stroke="#6b5a48" stroke-width="1"/>
+                <text x="90" y="23" font-family="var(--mono)" font-size="10" fill="#3c3228" text-anchor="middle">q1</text>
+                <path d="M 40,20 L 75,20" stroke="#6b5a48" stroke-width="1.5" marker-end="url(#l_arr0)"/>
+                <text x="60" y="15" font-family="var(--mono)" font-size="12" fill="#b84b22" font-weight="bold" text-anchor="middle">a</text>
+              </svg>
+            </div>
+          </div>
+
+          <div style="flex:1; min-width:110px;">
+            <div class="step-label" style="font-family:var(--mono)">a + b</div>
+            <div class="svg-container">
+              <svg width="120" height="60" viewBox="0 0 120 60">
+                <circle cx="30" cy="30" r="10" fill="none" stroke="#6b5a48" stroke-width="1.5"/>
+                <text x="30" y="33" font-family="var(--mono)" font-size="10" fill="#3c3228" text-anchor="middle">q0</text>
+                <circle cx="90" cy="30" r="10" fill="none" stroke="#6b5a48" stroke-width="1.5"/>
+                <circle cx="90" cy="30" r="7" fill="none" stroke="#6b5a48" stroke-width="1"/>
+                <text x="90" y="33" font-family="var(--mono)" font-size="10" fill="#3c3228" text-anchor="middle">q1</text>
+                <path d="M 37,23 Q 60,10 83,23" stroke="#6b5a48" stroke-width="1.5" fill="none" marker-end="url(#l_arr0)"/>
+                <text x="60" y="15" font-family="var(--mono)" font-size="12" fill="#b84b22" font-weight="bold" text-anchor="middle">a</text>
+                <path d="M 37,37 Q 60,50 83,37" stroke="#6b5a48" stroke-width="1.5" fill="none" marker-end="url(#l_arr0)"/>
+                <text x="60" y="52" font-family="var(--mono)" font-size="12" fill="#b84b22" font-weight="bold" text-anchor="middle">b</text>
+              </svg>
+            </div>
+          </div>
+
+          <div style="width:100%">
+            <div class="step-label" style="font-family:var(--mono)">a · b</div>
+            <div class="svg-container">
+              <svg width="180" height="40" viewBox="0 0 180 40">
+                <circle cx="30" cy="20" r="10" fill="none" stroke="#6b5a48" stroke-width="1.5"/>
+                <text x="30" y="23" font-family="var(--mono)" font-size="10" fill="#3c3228" text-anchor="middle">q0</text>
+                <circle cx="90" cy="20" r="10" fill="none" stroke="#6b5a48" stroke-width="1.5"/>
+                <text x="90" y="23" font-family="var(--mono)" font-size="10" fill="#3c3228" text-anchor="middle">q1</text>
+                <circle cx="150" cy="20" r="10" fill="none" stroke="#6b5a48" stroke-width="1.5"/>
+                <circle cx="150" cy="20" r="7" fill="none" stroke="#6b5a48" stroke-width="1"/>
+                <text x="150" y="23" font-family="var(--mono)" font-size="10" fill="#3c3228" text-anchor="middle">q2</text>
+                <path d="M 40,20 L 75,20" stroke="#6b5a48" stroke-width="1.5" marker-end="url(#l_arr0)"/>
+                <text x="60" y="15" font-family="var(--mono)" font-size="12" fill="#b84b22" font-weight="bold" text-anchor="middle">a</text>
+                <path d="M 100,20 L 135,20" stroke="#6b5a48" stroke-width="1.5" marker-end="url(#l_arr0)"/>
+                <text x="120" y="15" font-family="var(--mono)" font-size="12" fill="#b84b22" font-weight="bold" text-anchor="middle">b</text>
+              </svg>
+            </div>
+          </div>
+
+          <div style="flex:1; min-width:110px;">
+            <div class="step-label" style="font-family:var(--mono)">a*</div>
+            <div class="svg-container">
+              <svg width="80" height="60" viewBox="0 0 80 60">
+                <circle cx="40" cy="30" r="10" fill="none" stroke="#6b5a48" stroke-width="1.5"/>
+                <circle cx="40" cy="30" r="7" fill="none" stroke="#6b5a48" stroke-width="1"/>
+                <text x="40" y="33" font-family="var(--mono)" font-size="10" fill="#3c3228" text-anchor="middle">q0</text>
+                <path d="M 34,22 Q 40,0 46,22" stroke="#6b5a48" stroke-width="1.5" fill="none" marker-end="url(#l_arr0)"/>
+                <text x="40" y="12" font-family="var(--mono)" font-size="12" fill="#b84b22" font-weight="bold" text-anchor="middle">a</text>
+              </svg>
+            </div>
+          </div>
+          
+          <div style="flex:1; min-width:110px;">
+            <div class="step-label" style="font-family:var(--mono)">(ab)*</div>
+            <div class="svg-container" style="padding:16px;">
+              <svg width="120" height="60" viewBox="0 0 120 60">
+                <circle cx="30" cy="30" r="10" fill="none" stroke="#6b5a48" stroke-width="1.5"/>
+                <circle cx="30" cy="30" r="7" fill="none" stroke="#6b5a48" stroke-width="1"/>
+                <text x="30" y="33" font-family="var(--mono)" font-size="10" fill="#3c3228" text-anchor="middle">q0</text>
+                <circle cx="90" cy="30" r="10" fill="none" stroke="#6b5a48" stroke-width="1.5"/>
+                <text x="90" y="33" font-family="var(--mono)" font-size="10" fill="#3c3228" text-anchor="middle">q1</text>
+                <path d="M 40,26 L 80,26" stroke="#6b5a48" stroke-width="1.5" marker-end="url(#l_arr0)"/>
+                <text x="60" y="18" font-family="var(--mono)" font-size="12" fill="#b84b22" font-weight="bold" text-anchor="middle">a</text>
+                <path d="M 80,34 L 40,34" stroke="#6b5a48" stroke-width="1.5" marker-end="url(#l_arr0)"/>
+                <text x="60" y="46" font-family="var(--mono)" font-size="12" fill="#b84b22" font-weight="bold" text-anchor="middle">b</text>
+              </svg>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">3. NFA → DFA (Subset Construction)</div>
+        <div class="algo-explain green-explain">
+          Example: Constructing a DFA for the language of all binary strings where the <b>2nd last bit is 1</b>. Regex: <code>(0|1)*1(0|1)</code>
+        </div>
+        
+        <div class="step-card">
+          <div class="step-label">Initial NFA</div>
+          <div class="svg-container" style="padding: 20px;">
+             <svg width="240" height="70" viewBox="0 0 240 70">
+                <path d="M 10,35 L 25,35" stroke="#6b5a48" stroke-width="1.5" marker-end="url(#l_arr0)"/>
+                <circle cx="40" cy="35" r="14" fill="none" stroke="#6b5a48" stroke-width="1.5"/>
+                <text x="40" y="39" font-family="var(--mono)" font-size="12" fill="#3c3228" text-anchor="middle">q0</text>
+                <circle cx="120" cy="35" r="14" fill="none" stroke="#6b5a48" stroke-width="1.5"/>
+                <text x="120" y="39" font-family="var(--mono)" font-size="12" fill="#3c3228" text-anchor="middle">q1</text>
+                <circle cx="200" cy="35" r="14" fill="rgba(45,122,62,0.1)" stroke="#2d7a3e" stroke-width="1.5"/>
+                <circle cx="200" cy="35" r="10" fill="none" stroke="#2d7a3e" stroke-width="1"/>
+                <text x="200" y="39" font-family="var(--mono)" font-size="12" fill="#3c3228" text-anchor="middle">q2</text>
+                
+                <path d="M 54,35 L 100,35" stroke="#6b5a48" stroke-width="1.5" marker-end="url(#l_arr0)"/>
+                <text x="77" y="28" font-family="var(--mono)" font-size="12" fill="#b84b22" font-weight="bold" text-anchor="middle">1</text>
+                
+                <path d="M 134,35 L 180,35" stroke="#6b5a48" stroke-width="1.5" marker-end="url(#l_arr0)"/>
+                <text x="157" y="28" font-family="var(--mono)" font-size="12" fill="#b84b22" font-weight="bold" text-anchor="middle">0,1</text>
+                
+                <path d="M 33,22 Q 40,0 47,22" stroke="#6b5a48" stroke-width="1.5" fill="none" marker-end="url(#l_arr0)"/>
+                <text x="40" y="12" font-family="var(--mono)" font-size="12" fill="#b84b22" font-weight="bold" text-anchor="middle">0,1</text>
+             </svg>
+          </div>
+        </div>
+
+        <div class="step-card">
+          <div class="step-label">Transition Table (Subset States)</div>
+          <div class="table-wrap" style="margin-top:10px">
+            <table class="trans-table">
+               <tr><th>States (DFA)</th><th>0</th><th>1</th></tr>
+               <tr><td>→ {q0}</td><td>{q0}</td><td>{q0, q1}</td></tr>
+               <tr><td>&nbsp;&nbsp; {q0, q1}</td><td>{q0, q2}</td><td>{q0, q1, q2}</td></tr>
+               <tr><td class="accept-state">* {q0, q2}</td><td>{q0}</td><td>{q0, q1}</td></tr>
+               <tr><td class="accept-state">* {q0, q1, q2}</td><td>{q0, q2}</td><td>{q0, q1, q2}</td></tr>
+            </table>
+          </div>
+        </div>
+
+        <div class="step-card">
+          <div class="step-label">Resulting DFA Diagram</div>
+          <div class="svg-container" style="padding: 24px;">
+            <svg width="240" height="150" viewBox="0 0 240 150">
+               <circle cx="40" cy="40" r="18" fill="#fdf8ef" stroke="#6b5a48" stroke-width="1.5"/>
+               <text x="40" y="44" font-family="var(--mono)" font-size="11" fill="#3c3228" text-anchor="middle">q0</text>
+               <path d="M 5,40 L 18,40" stroke="#6b5a48" stroke-width="1.5" marker-end="url(#l_arr0)"/>
+
+               <circle cx="160" cy="40" r="18" fill="#fdf8ef" stroke="#6b5a48" stroke-width="1.5"/>
+               <text x="160" y="44" font-family="var(--mono)" font-size="10" fill="#3c3228" text-anchor="middle">q0,q1</text>
+
+               <circle cx="40" cy="110" r="18" fill="rgba(45,122,62,0.1)" stroke="#2d7a3e" stroke-width="1.5"/>
+               <circle cx="40" cy="110" r="14" fill="none" stroke="#2d7a3e" stroke-width="1"/>
+               <text x="40" y="114" font-family="var(--mono)" font-size="10" fill="#3c3228" text-anchor="middle">q0,q2</text>
+
+               <circle cx="160" cy="110" r="18" fill="rgba(45,122,62,0.1)" stroke="#2d7a3e" stroke-width="1.5"/>
+               <circle cx="160" cy="110" r="14" fill="none" stroke="#2d7a3e" stroke-width="1"/>
+               <text x="160" y="114" font-family="var(--mono)" font-size="9" fill="#3c3228" text-anchor="middle">q0,q1,q2</text>
+
+               <path d="M 30,24 Q 40,0 50,24" stroke="#6b5a48" stroke-width="1.5" fill="none" marker-end="url(#l_arr0)"/>
+               <text x="40" y="15" font-family="var(--mono)" font-size="11" fill="#b84b22" font-weight="bold" text-anchor="middle">0</text>
+               
+               <path d="M 58,40 L 138,40" stroke="#6b5a48" stroke-width="1.5" marker-end="url(#l_arr0)"/>
+               <text x="98" y="32" font-family="var(--mono)" font-size="11" fill="#b84b22" font-weight="bold" text-anchor="middle">1</text>
+               
+               <path d="M 160,58 L 160,88" stroke="#6b5a48" stroke-width="1.5" marker-end="url(#l_arr0)"/>
+               <text x="168" y="76" font-family="var(--mono)" font-size="11" fill="#b84b22" font-weight="bold" text-anchor="middle">1</text>
+
+               <path d="M 148,53 L 52,97" stroke="#6b5a48" stroke-width="1.5" marker-end="url(#l_arr0)"/>
+               <text x="90" y="86" font-family="var(--mono)" font-size="11" fill="#b84b22" font-weight="bold" text-anchor="middle">0</text>
+               
+               <path d="M 30,94 Q 20,75 30,56" stroke="#6b5a48" stroke-width="1.5" fill="none" marker-end="url(#l_arr0)"/>
+               <text x="15" y="78" font-family="var(--mono)" font-size="11" fill="#b84b22" font-weight="bold" text-anchor="middle">0</text>
+               
+               <path d="M 52,103 L 140,49" stroke="#6b5a48" stroke-width="1.5" marker-end="url(#l_arr0)"/>
+               <text x="106" y="66" font-family="var(--mono)" font-size="11" fill="#b84b22" font-weight="bold" text-anchor="middle">1</text>
+
+               <path d="M 178,110 Q 200,100 178,122" stroke="#6b5a48" stroke-width="1.5" fill="none" marker-end="url(#l_arr0)"/>
+               <text x="195" y="115" font-family="var(--mono)" font-size="11" fill="#b84b22" font-weight="bold" text-anchor="middle">1</text>
+
+               <path d="M 142,110 L 62,110" stroke="#6b5a48" stroke-width="1.5" marker-end="url(#l_arr0)"/>
+               <text x="102" y="105" font-family="var(--mono)" font-size="11" fill="#b84b22" font-weight="bold" text-anchor="middle">0</text>
+            </svg>
+          </div>
+        </div>
+      </div>
+    </div><!-- /sbpane-learn -->
+
+  </div>
+
+  <!-- Canvas -->
+  <div class="canvas-area">
+    
+    <div class="canvas-toolbar">
+      <span class="canvas-label">AUTOMATON</span>
+      <span id="mode-badge" class="mode-badge badge-enfa">ε-NFA</span>
+      <span id="mode-subtitle" style="font-size:10px;color:var(--text3);font-family:var(--mono);margin-left:6px"></span>
+      <div style="margin-left:auto;display:flex;gap:8px">
+        <button class="btn btn-outline btn-sm" onclick="switchSbTab('steps')" style="font-size:10px" title="View construction steps">Steps ↗</button>
+        <button class="btn btn-outline btn-sm" onclick="switchSbTab('explain')" style="font-size:10px" title="View simple explanation">Explain ↗</button>
+        <button class="btn btn-outline btn-sm" onclick="zoomFit()">Fit</button>
+        <button class="btn btn-outline btn-sm" onclick="resetView()">Reset</button>
+      </div>
+    </div>
+    <canvas id="main-canvas"></canvas>
+    <div id="hand-prompt-overlay" style="display:none">
+      <div class="hand-prompt-box">
+        <div class="hand-prompt-title" id="hand-prompt-title">Transition Label</div>
+        <div style="font-size:11px;color:var(--text3);font-family:var(--sans);margin-bottom:8px">Enter symbol(s), comma-separated. Use ε for epsilon.</div>
+        <input class="hand-prompt-input" id="hand-prompt-input" placeholder="e.g.  a   or   a,b   or   ε" autocomplete="off">
+        <div class="hand-prompt-btns">
+          <button class="btn btn-outline btn-sm" onclick="handPromptCancel()">Cancel</button>
+          <button class="btn btn-sm" onclick="handPromptConfirm()">Add →</button>
+        </div>
+      </div>
+    </div>
+    <div class="empty-state" id="empty-state">
+      <div class="empty-icon">∑</div>
+      <div class="empty-title">No automaton yet</div>
+      <div class="empty-sub">Enter a regex and click Build</div>
+    </div>
+    <div class="legend" id="legend" style="display:none">
+      <div class="legend-item"><div class="legend-dot ld-start"></div>Start state</div>
+      <div class="legend-item"><div class="legend-dot ld-accept"></div>Accept state</div>
+      <div class="legend-item"><div class="legend-dot ld-normal"></div>Normal state</div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// UI BEHAVIORS
+// ============================================================
+
+function toggleSidebar() {
+  const sidebar = document.getElementById('sidebar');
+  sidebar.classList.toggle('collapsed');
+  const icon = document.getElementById('sidebar-toggle-icon');
+  if (sidebar.classList.contains('collapsed')) {
+    icon.innerHTML = '<path d="M15 18l-6-6 6-6"/>';
+  } else {
+    icon.innerHTML = '<path d="M9 18l6-6-6-6"/>';
+  }
+  setTimeout(resizeCanvas, 300);
+}
+
+function setBuildButtonExpanded(expanded) {
+  const box = document.getElementById('regex-floating-box');
+  const toggle = document.getElementById('build-toggle-btn');
+  if (!box || !toggle) return;
+  box.classList.toggle('build-collapsed', !expanded);
+  toggle.textContent = expanded ? '‹' : '›';
+  toggle.setAttribute('aria-label', expanded ? 'Collapse build button' : 'Expand build button');
+}
+
+function toggleBuildButton() {
+  const box = document.getElementById('regex-floating-box');
+  if (!box) return;
+  setBuildButtonExpanded(box.classList.contains('build-collapsed'));
+}
+
+function escapeHtml(text) {
+  return String(text).replace(/[&<>"']/g, ch => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;'
+  }[ch]));
+}
+
+function formatStateSet(states) {
+  if (!states || states.length === 0) return '∅';
+  return `{${states.map(s => `q${s}`).join(', ')}}`;
+}
+
+function letterLabel(index) {
+  let n = index;
+  let out = '';
+  do {
+    out = String.fromCharCode(65 + (n % 26)) + out;
+    n = Math.floor(n / 26) - 1;
+  } while (n >= 0);
+  return out;
+}
+
+function tokenizeForTeaching(re) {
+  const tokens = [];
+  const merged = preprocess(re);
+  for (const ch of merged) {
+    if (ch === '·') tokens.push({ type: 'concat', value: ch, label: 'concat' });
+    else if (ch === '|') tokens.push({ type: 'union', value: ch, label: 'union' });
+    else if (ch === '*') tokens.push({ type: 'star', value: ch, label: 'star' });
+    else if (ch === '+') tokens.push({ type: 'plus', value: ch, label: 'plus' });
+    else if (ch === '?') tokens.push({ type: 'optional', value: ch, label: 'optional' });
+    else if (ch === '(' || ch === ')') tokens.push({ type: 'group', value: ch, label: 'group' });
+    else tokens.push({ type: 'symbol', value: ch, label: 'symbol' });
+  }
+  return tokens;
+}
+
+function uniqueSymbolsFromRegex(re) {
+  return [...new Set([...re].filter(ch => !['(', ')', '*', '+', '?', '|'].includes(ch)))].sort();
+}
+
+function automatonLabelFor(state, mode) {
+  if (state?.label) return state.label;
+  if (mode === 'minequiv') return `E${state.id}`;
+  if (mode === 'minmyhill') return `M${state.id}`;
+  return `q${state.id}`;
+}
+
+function buildSvgAutomatonModel(automaton, mode) {
+  if (!automaton) return null;
+  if (mode === 'enfa' || mode === 'nfa') {
+    const states = [];
+    for (let i = 0; i < automaton.stateCount; i++) {
+      states.push({
+        id: i,
+        label: `q${i}`,
+        isStart: i === automaton.start,
+        isAccept: mode === 'enfa' ? i === automaton.accept : automaton.acceptStates.has(i)
+      });
+    }
+    const edges = [];
+    for (const [from, trans] of automaton.transitions) {
+      for (const { symbol, to } of trans) edges.push({ from, to, symbol });
+    }
+    return { states, edges };
+  }
+  const states = automaton.states.map(s => ({
+    id: s.id,
+    label: automatonLabelFor(s, mode),
+    isStart: s.isStart,
+    isAccept: s.isAccept
+  }));
+  const edges = [];
+  for (const [from, trans] of automaton.transitions) {
+    for (const { symbol, to } of trans) edges.push({ from, to, symbol });
+  }
+  return { states, edges };
+}
+
+function renderAutomatonSnapshot(automaton, mode, options = {}) {
+  const model = buildSvgAutomatonModel(automaton, mode);
+  if (!model || model.states.length === 0) return '';
+
+  const grouped = new Map();
+  for (const edge of model.edges) {
+    const key = `${edge.from}-${edge.to}`;
+    if (!grouped.has(key)) grouped.set(key, []);
+    grouped.get(key).push(edge.symbol);
+  }
+
+  const states = model.states;
+  const spacing = Math.max(88, Math.min(120, 480 / Math.max(1, states.length - 1 || 1)));
+  const radius = 20;
+  const width = Math.max(280, 110 + Math.max(0, states.length - 1) * spacing + 110);
+  const centerY = 74;
+  const positions = new Map();
+  states.forEach((state, index) => {
+    positions.set(state.id, { x: 62 + index * spacing, y: centerY });
+  });
+
+  const edgeSvgs = [];
+  let markerIdx = 0;
+  for (const [key, symbols] of grouped) {
+    const [from, to] = key.split('-').map(Number);
+    const start = positions.get(from);
+    const end = positions.get(to);
+    const color = symbols.includes(EPSILON) ? '#a66a1a' : '#6b5a48';
+    const labelColor = symbols.includes(EPSILON) ? '#a66a1a' : '#b84b22';
+    const label = symbols.join(', ');
+    const markerId = `sg_arr_${mode}_${from}_${to}_${markerIdx++}`;
+    if (from === to) {
+      edgeSvgs.push(`
+        <defs><marker id="${markerId}" viewBox="0 -3 6 6" refX="6" refY="0" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,-3L6,0L0,3" fill="${color}"/></marker></defs>
+        <path d="M ${start.x - 8},${start.y - 18} C ${start.x - 24},${start.y - 58} ${start.x + 24},${start.y - 58} ${start.x + 8},${start.y - 18}" fill="none" stroke="${color}" stroke-width="1.7" marker-end="url(#${markerId})"/>
+        <text x="${start.x}" y="${start.y - 48}" font-family="var(--mono)" font-size="11" fill="${labelColor}" text-anchor="middle">${escapeHtml(label)}</text>
+      `);
+    } else {
+      const dir = Math.sign(end.x - start.x) || 1;
+      const sx = start.x + dir * radius;
+      const ex = end.x - dir * radius;
+      edgeSvgs.push(`
+        <defs><marker id="${markerId}" viewBox="0 -3 6 6" refX="6" refY="0" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,-3L6,0L0,3" fill="${color}"/></marker></defs>
+        <path d="M ${sx},${start.y} L ${ex},${end.y}" stroke="${color}" stroke-width="1.7" marker-end="url(#${markerId})"/>
+        <text x="${(sx + ex) / 2}" y="${start.y - 10}" font-family="var(--mono)" font-size="11" fill="${labelColor}" text-anchor="middle">${escapeHtml(label)}</text>
+      `);
+    }
+  }
+
+  const stateSvgs = states.map(state => {
+    const pos = positions.get(state.id);
+    return `
+      ${state.isStart ? `<path d="M ${pos.x - 44},${pos.y} L ${pos.x - 24},${pos.y}" stroke="#a66a1a" stroke-width="1.7"/><path d="M ${pos.x - 24},${pos.y} L ${pos.x - 31},${pos.y - 4} L ${pos.x - 31},${pos.y + 4} Z" fill="#a66a1a"/>` : ''}
+      <circle cx="${pos.x}" cy="${pos.y}" r="${radius}" fill="${state.isAccept ? 'rgba(45,122,62,0.08)' : 'rgba(255,250,243,0.92)'}" stroke="${state.isAccept ? '#2d7a3e' : '#6b5a48'}" stroke-width="1.8"/>
+      ${state.isAccept ? `<circle cx="${pos.x}" cy="${pos.y}" r="${radius - 5}" fill="none" stroke="#2d7a3e" stroke-width="1.1"/>` : ''}
+      <text x="${pos.x}" y="${pos.y + 4}" font-family="var(--mono)" font-size="${state.label.length > 4 ? 10 : 11}" fill="#3c3228" text-anchor="middle">${escapeHtml(state.label)}</text>
+    `;
+  }).join('');
+
+  return `<svg width="100%" viewBox="0 0 ${width} 150" role="img" aria-label="${escapeHtml(options.label || mode)} automaton">${edgeSvgs.join('')}${stateSvgs}</svg>`;
+}
+
+function renderPartitionPreview(partitions, acceptSet = []) {
+  return `<div class="teach-columns">${partitions.map((group, idx) => `
+    <div class="teach-column">
+      <h4>P${idx}</h4>
+      <div class="stack">
+        ${group.map(state => `<span class="set-chip${acceptSet.includes(state) ? ' accept' : ''}">q${state}${acceptSet.includes(state) ? '*' : ''}</span>`).join('')}
+      </div>
+    </div>
+  `).join('')}</div>`;
+}
+
+function renderGuidedWalkthrough() {
+  const guideEl = document.getElementById('steps-guide-content');
+  const explainEl = document.getElementById('explain-content');
+  const explainEmpty = document.getElementById('explain-empty-msg');
+  if (!guideEl || !explainEl) return;
+  if (!currentEnfa || !currentNfa || !currentDfa || !currentMinEquiv || !currentMinMyhill) {
+    guideEl.innerHTML = '';
+    explainEl.innerHTML = '';
+    if (explainEmpty) explainEmpty.style.display = 'block';
+    explainEl.style.display = 'none';
+    return;
+  }
+
+  const tokens = tokenizeForTeaching(currentRegex);
+  const symbolTokens = tokens.filter(t => t.type === 'symbol').map(t => t.value);
+  const operators = tokens.filter(t => ['union', 'concat', 'star', 'plus', 'optional'].includes(t.type));
+  const alphabet = uniqueSymbolsFromRegex(currentRegex);
+  const closureStep = currentNfa.steps.find(step => step.type === 'closures');
+  const transitionSteps = currentDfa.steps.filter(step => step.type === 'transition');
+  const firstTransition = transitionSteps[0];
+  const equivFirst = currentMinEquiv.steps[0];
+  const equivLast = currentMinEquiv.steps[currentMinEquiv.steps.length - 1];
+  const myhillBase = currentMinMyhill.steps.find(step => step.type === 'base');
+  const myhillPass = currentMinMyhill.steps.find(step => step.type === 'pass');
+  const myhillResult = currentMinMyhill.steps[currentMinMyhill.steps.length - 1];
+  const dfaSampleStates = currentDfa.states.slice(0, 5);
+
+  const html = `
+    <div class="explain-hero">
+      <div class="explain-kicker">Dynamic Classroom Notes</div>
+      <div class="explain-title">${escapeHtml(currentRegex)}</div>
+      <div class="explain-copy">We build the same regex through five views: Thompson ε-NFA, epsilon removal, closure-based subset construction, equivalence minimization, and Myhill-Nerode minimization. The easy story comes first here; the proof-style details stay below in the numbered panels.</div>
+      <div class="teach-path">
+        <div class="teach-pill"><strong>Regex</strong>${escapeHtml(currentRegex)}</div>
+        <div class="teach-pill"><strong>Alphabet</strong>${alphabet.length ? alphabet.map(escapeHtml).join(', ') : '∅'}</div>
+        <div class="teach-pill"><strong>ε-NFA</strong>${currentEnfa.stateCount} states</div>
+        <div class="teach-pill"><strong>DFA</strong>${currentDfa.stateCount} states</div>
+        <div class="teach-pill"><strong>Min</strong>${currentMinEquiv.stateCount} states</div>
+      </div>
+    </div>
+
+    <div class="chalk-grid">
+      <div class="chalk-card">
+        <div class="chalk-head">
+          <div class="chalk-title">Regex Breakdown</div>
+          <div class="formula-pill">postfix: ${escapeHtml(currentPostfix.join(' '))}</div>
+        </div>
+        <div class="chalk-copy">Before building states, we read the expression as pieces. Symbols become small automata, then operators glue them together.</div>
+        <div class="teach-row">
+          ${tokens.map(token => `<span class="set-chip">${escapeHtml(token.value)} · ${token.label}</span>`).join('')}
+        </div>
+        <div class="teach-note">
+          Symbols read in order: ${symbolTokens.length ? symbolTokens.map(escapeHtml).join(' → ') : 'none'}.
+          Operators found: ${operators.length ? operators.map(op => escapeHtml(op.value)).join(', ') : 'none'}.
+        </div>
+      </div>
+
+      <div class="chalk-card">
+        <div class="chalk-head">
+          <div class="chalk-title">Regex → ε-NFA</div>
+          <div class="formula-pill">Thompson blocks</div>
+        </div>
+        <div class="chalk-copy">Every symbol creates one arrow. Union, concatenation, and star add ε-links exactly like the whiteboard templates in your pictures.</div>
+        <div class="chalk-diagram">${renderAutomatonSnapshot(currentEnfa, 'enfa', { label: 'epsilon NFA snapshot' })}</div>
+        <div class="teach-note">This ε-NFA keeps construction simple. Free ε moves make it easy to stitch partial machines together before we clean them up.</div>
+      </div>
+    </div>
+
+    <div class="explain-list">
+      <div class="explain-card highlight">
+        <div class="explain-card-head">
+          <div>
+            <div class="explain-card-title">1. Remove ε-transitions to get an NFA</div>
+            <div class="explain-card-copy">For each state, compute its ε-closure once, then reuse that closure to rebuild real symbol transitions without ε edges.</div>
+          </div>
+          <div class="formula-pill">δ'(q, a) = ε-closure(move(ε-closure(q), a))</div>
+        </div>
+        <div class="teach-row">
+          ${(closureStep?.closures || []).slice(0, 6).map(item => `<span class="set-chip${item.isAccept ? ' accept' : ''}">ε-closure(q${item.state}) = ${escapeHtml(formatStateSet(item.closure))}</span>`).join('')}
+        </div>
+        <div class="chalk-diagram" style="margin-top:12px">${renderAutomatonSnapshot(currentNfa, 'nfa', { label: 'NFA snapshot' })}</div>
+        <div class="teach-note">A state becomes accepting if its closure can already reach the old final state. That is why acceptance can spread backwards during ε-elimination.</div>
+      </div>
+
+      <div class="explain-card green">
+        <div class="explain-card-head">
+          <div>
+            <div class="explain-card-title">2. NFA → DFA using the closure method</div>
+            <div class="explain-card-copy">Each DFA state is a whole set of NFA states. We rename those sets as A, B, C, ... so the conversion reads like a classroom table instead of a wall of braces.</div>
+          </div>
+          <div class="formula-pill">A, B, C are state-sets</div>
+        </div>
+        <div class="teach-columns">
+          <div class="teach-column">
+            <h4>Subset States</h4>
+            <div class="stack">
+              ${dfaSampleStates.map(state => `<span class="set-chip${state.isAccept ? ' accept' : ''}">${escapeHtml(state.label)} = ${escapeHtml(formatStateSet(state.nfaStates))}</span>`).join('')}
+            </div>
+          </div>
+          <div class="teach-column">
+            <h4>First Move</h4>
+            <div class="stack">
+              ${firstTransition ? `
+                <span class="set-chip">${escapeHtml(firstTransition.fromLabel)} on ${escapeHtml(firstTransition.symbol)}</span>
+                <span class="set-chip">move = ${escapeHtml(formatStateSet(firstTransition.moved))}</span>
+                <span class="set-chip${firstTransition.isAccept ? ' accept' : ''}">ε-closure = ${escapeHtml(formatStateSet(firstTransition.closure))}</span>
+                <span class="set-chip${firstTransition.isAccept ? ' accept' : ''}">${escapeHtml(firstTransition.toLabel)}</span>
+              ` : '<span class="set-chip">No transition sample</span>'}
+            </div>
+          </div>
+        </div>
+        <div class="chalk-diagram" style="margin-top:12px">${renderAutomatonSnapshot(currentDfa, 'dfa', { label: 'DFA snapshot' })}</div>
+        <div class="teach-note">${firstTransition ? escapeHtml(`${firstTransition.formulaText}. ${firstTransition.acceptanceReason}`) : 'Build a regex with at least one transition to see the first subset move.'}</div>
+      </div>
+
+      <div class="explain-card purple">
+        <div class="explain-card-head">
+          <div>
+            <div class="explain-card-title">3. Minimization by equivalence classes</div>
+            <div class="explain-card-copy">Start with only two buckets: accepting and non-accepting. Then split buckets whenever two states behave differently on some symbol.</div>
+          </div>
+          <div class="formula-pill">partition refinement</div>
+        </div>
+        ${equivFirst ? renderPartitionPreview(equivFirst.partitions, equivFirst.acceptSet) : ''}
+        <div class="teach-note">${equivLast ? escapeHtml(equivLast.desc) : 'No partition data available.'}</div>
+      </div>
+
+      <div class="explain-card indigo">
+        <div class="explain-card-head">
+          <div>
+            <div class="explain-card-title">4. Minimization by Myhill-Nerode</div>
+            <div class="explain-card-copy">The table-filling view asks a different question: which pairs of states can be distinguished by some future input? Mark those pairs, then merge everything left unmarked.</div>
+          </div>
+          <div class="formula-pill">table filling</div>
+        </div>
+        <div class="teach-columns">
+          <div class="teach-column">
+            <h4>Base Marks</h4>
+            <div class="stack">
+              ${(myhillBase?.pairs || []).slice(0, 6).map(pair => `<span class="set-chip">(q${pair.qi}, q${pair.qj})</span>`).join('') || '<span class="set-chip">No immediate marks</span>'}
+            </div>
+          </div>
+          <div class="teach-column">
+            <h4>Later Marks</h4>
+            <div class="stack">
+              ${(myhillPass?.newMarks || []).slice(0, 6).map(pair => `<span class="set-chip">on ${escapeHtml(pair.sym)} ⇒ (q${pair.qi}, q${pair.qj})</span>`).join('') || '<span class="set-chip">No later marks needed</span>'}
+            </div>
+          </div>
+        </div>
+        <div class="teach-note">${myhillResult ? escapeHtml(myhillResult.desc) : 'No Myhill result available.'}</div>
+      </div>
+    </div>
+  `;
+
+  guideEl.innerHTML = html;
+  explainEl.innerHTML = html;
+  explainEl.style.display = 'block';
+  if (explainEmpty) explainEmpty.style.display = 'none';
+}
+
+// ============================================================
+// REGEX PARSER & THOMPSON'S CONSTRUCTION
+// ============================================================
+
+const EPSILON = 'ε';
+let stateCounter = 0;
+function newState() { return stateCounter++; }
+
+function preprocess(re) {
+  let result = '';
+  const binary = ['|'];
+  const unary = ['*', '+', '?'];
+  const special = ['(', ')', '*', '+', '?', '|'];
+  for (let i = 0; i < re.length; i++) {
+    const c = re[i];
+    result += c;
+    if (i + 1 < re.length) {
+      const n = re[i + 1];
+      if (!binary.includes(c) && c !== '(' && !binary.includes(n) && n !== ')' && !unary.includes(n)) {
+        result += '·';
+      }
+    }
+  }
+  return result;
+}
+
+function precedence(op) {
+  if (op === '|') return 1;
+  if (op === '·') return 2;
+  if (op === '*' || op === '+' || op === '?') return 3;
+  return 0;
+}
+
+function toPostfix(re) {
+  const output = [], ops = [];
+  const preprocessed = preprocess(re);
+  for (const c of preprocessed) {
+    if (c === '(') {
+      ops.push(c);
+    } else if (c === ')') {
+      while (ops.length && ops[ops.length-1] !== '(') output.push(ops.pop());
+      ops.pop();
+    } else if (['|','·','*','+','?'].includes(c)) {
+      while (ops.length && ops[ops.length-1] !== '(' && precedence(ops[ops.length-1]) >= precedence(c)) {
+        output.push(ops.pop());
+      }
+      ops.push(c);
+    } else {
+      output.push(c);
+    }
+  }
+  while (ops.length) output.push(ops.pop());
+  return output;
+}
+
+function thompsonBuild(postfix) {
+  stateCounter = 0;
+  const stack = [];
+  const transitions = new Map();
+  const addTrans = (from, symbol, to) => {
+    if (!transitions.has(from)) transitions.set(from, []);
+    transitions.get(from).push({ symbol, to });
+  };
+
+  const makeAtom = (sym) => {
+    const s = newState(), a = newState();
+    addTrans(s, sym, a);
+    return { start: s, accept: a };
+  };
+
+  const makeStar = (f) => {
+    const s = newState(), a = newState();
+    addTrans(s, EPSILON, f.start);
+    addTrans(s, EPSILON, a);
+    addTrans(f.accept, EPSILON, f.start);
+    addTrans(f.accept, EPSILON, a);
+    return { start: s, accept: a };
+  };
+
+  const makePlus = (f) => {
+    const s = newState(), a = newState();
+    addTrans(s, EPSILON, f.start);
+    addTrans(f.accept, EPSILON, f.start);
+    addTrans(f.accept, EPSILON, a);
+    return { start: s, accept: a };
+  };
+
+  const makeOptional = (f) => {
+    const s = newState(), a = newState();
+    addTrans(s, EPSILON, f.start);
+    addTrans(s, EPSILON, a);
+    addTrans(f.accept, EPSILON, a);
+    return { start: s, accept: a };
+  };
+
+  const makeConcat = (f1, f2) => {
+    addTrans(f1.accept, EPSILON, f2.start);
+    return { start: f1.start, accept: f2.accept };
+  };
+
+  const makeUnion = (f1, f2) => {
+    const s = newState(), a = newState();
+    addTrans(s, EPSILON, f1.start);
+    addTrans(s, EPSILON, f2.start);
+    addTrans(f1.accept, EPSILON, a);
+    addTrans(f2.accept, EPSILON, a);
+    return { start: s, accept: a };
+  };
+
+  for (const token of postfix) {
+    if (token === '*') {
+      stack.push(makeStar(stack.pop()));
+    } else if (token === '+') {
+      stack.push(makePlus(stack.pop()));
+    } else if (token === '?') {
+      stack.push(makeOptional(stack.pop()));
+    } else if (token === '·') {
+      const f2 = stack.pop(), f1 = stack.pop();
+      stack.push(makeConcat(f1, f2));
+    } else if (token === '|') {
+      const f2 = stack.pop(), f1 = stack.pop();
+      stack.push(makeUnion(f1, f2));
+    } else {
+      stack.push(makeAtom(token));
+    }
+  }
+
+  if (stack.length !== 1) throw new Error('Invalid regex');
+  const nfa = stack[0];
+  return { start: nfa.start, accept: nfa.accept, transitions, stateCount: stateCounter };
+}
+
+// ε-closure
+function epsilonClosure(states, transitions) {
+  const closure = new Set(states);
+  const queue = [...states];
+  while (queue.length) {
+    const s = queue.shift();
+    const trans = transitions.get(s) || [];
+    for (const { symbol, to } of trans) {
+      if (symbol === EPSILON && !closure.has(to)) {
+        closure.add(to);
+        queue.push(to);
+      }
+    }
+  }
+  return closure;
+}
+
+// Move
+function move(states, symbol, transitions) {
+  const result = new Set();
+  for (const s of states) {
+    const trans = transitions.get(s) || [];
+    for (const { symbol: sym, to } of trans) {
+      if (sym === symbol) result.add(to);
+    }
+  }
+  return result;
+}
+
+// ============================================================
+// ε-NFA → NFA (ε-ELIMINATION)
+// ============================================================
+
+function enfaToNfa(enfa) {
+  const { start, accept, transitions, stateCount } = enfa;
+  const alphabet = new Set();
+  for (const [, trans] of transitions)
+    for (const { symbol } of trans)
+      if (symbol !== EPSILON) alphabet.add(symbol);
+
+  const nfaTransitions = new Map();
+  const nfaAcceptStates = new Set();
+  const steps = [];
+
+  // Compute ε-closure for every state
+  const closures = new Map();
+  for (let q = 0; q < stateCount; q++) {
+    const cl = [...epsilonClosure([q], transitions)].sort((a,b)=>a-b);
+    closures.set(q, cl);
+    if (cl.includes(accept)) nfaAcceptStates.add(q);
+  }
+
+  steps.push({
+    type: 'closures',
+    label: 'ε-Closures for all states',
+    desc: 'First compute the ε-closure of every state in the ε-NFA.',
+    formulaText: `ε-closure(q) = all states reachable from q using only ${EPSILON}-moves`,
+    closures: [...closures.entries()].map(([q, cl]) => ({
+      state: q,
+      closure: cl,
+      isAccept: cl.includes(accept)
+    }))
+  });
+
+  // Build NFA transitions without ε
+  const symList = [...alphabet].sort();
+  for (let q = 0; q < stateCount; q++) {
+    const qClosure = closures.get(q);
+    for (const sym of symList) {
+      // move(ε-closure(q), sym)
+      const moved = new Set();
+      for (const s of qClosure) {
+        const trans = transitions.get(s) || [];
+        for (const { symbol, to } of trans) {
+          if (symbol === sym) moved.add(to);
+        }
+      }
+      if (moved.size === 0) continue;
+      
+      // ε-closure(move result)
+      const finalSet = [...epsilonClosure([...moved], transitions)].sort((a,b)=>a-b);
+      
+      if (!nfaTransitions.has(q)) nfaTransitions.set(q, []);
+      for (const t of finalSet) {
+        if (!nfaTransitions.get(q).some(tr => tr.symbol === sym && tr.to === t)) {
+          nfaTransitions.get(q).push({ symbol: sym, to: t });
+        }
+      }
+
+      steps.push({
+        type: 'transition',
+        label: `δ'(q${q}, ${sym})`,
+        desc: `ε-closure(q${q}) = {${qClosure.map(s=>'q'+s).join(',')}} → move on '${sym}' = {${[...moved].map(s=>'q'+s).join(',')}} → ε-closure = {${finalSet.map(s=>'q'+s).join(',')}}`,
+        formulaText: `δ'(q, ${sym}) = ε-closure(move(ε-closure(q), ${sym}))`,
+        from: q,
+        symbol: sym,
+        closure: qClosure,
+        moved: [...moved],
+        result: finalSet,
+        resultLabel: formatStateSet(finalSet),
+        acceptanceReason: finalSet.includes(accept) ? `Result contains q${accept}, so this path can still reach acceptance.` : 'Result does not directly include the original accept state.'
+      });
+    }
+  }
+
+  steps.push({
+    type: 'summary',
+    label: 'NFA Complete',
+    desc: `NFA has ${stateCount} states, accept states: {${[...nfaAcceptStates].map(s=>'q'+s).join(',')}}. All ε-transitions removed.`,
+    acceptStates: [...nfaAcceptStates]
+  });
+
+  return {
+    start,
+    accept, // original accept for reference
+    acceptStates: nfaAcceptStates,
+    transitions: nfaTransitions,
+    stateCount,
+    alphabet: symList,
+    steps
+  };
+}
+
+// ============================================================
+// NFA → DFA (SUBSET CONSTRUCTION / ε-CLOSURE METHOD)
+// ============================================================
+
+function nfaToDfa(enfa) {
+  const subset = buildSubsetSteps(enfa);
+  return {
+    states: subset.dfaStateList,
+    transitions: subset.dfaTransitions,
+    start: 0,
+    alphabet: subset.symList,
+    stateCount: subset.stateCount,
+    steps: subset.steps
+  };
+}
+
+// Validate regex
+function validateRegex(re) {
+  if (!re.trim()) throw new Error('Empty expression');
+  let depth = 0;
+  for (const c of re) {
+    if (c === '(') depth++;
+    else if (c === ')') { depth--; if (depth < 0) throw new Error('Unmatched )'); }
+  }
+  if (depth !== 0) throw new Error('Unmatched (');
+  const invalid = re.match(/^[*+?|]|[|][*+?|]|[|]$|\(\)/);
+  if (invalid) throw new Error('Invalid operator placement');
+}
+
+// ============================================================
+// EQUIVALENCE METHOD MINIMIZATION (Partition Refinement)
+// ============================================================
+
+function minimizeDfaEquivalence(dfa) {
+  // 1. Reachable states
+  const reachable = new Set();
+  const bfsQ = [dfa.start];
+  reachable.add(dfa.start);
+  while (bfsQ.length) {
+    const s = bfsQ.shift();
+    for (const { to } of (dfa.transitions.get(s) || [])) {
+      if (!reachable.has(to)) { reachable.add(to); bfsQ.push(to); }
+    }
+  }
+  const reachStates = dfa.states.filter(s => reachable.has(s.id));
+
+  // 2. Initial partition
+  const accepting    = new Set(reachStates.filter(s =>  s.isAccept).map(s => s.id));
+  const nonAccepting = new Set(reachStates.filter(s => !s.isAccept).map(s => s.id));
+  let partitions = [];
+  if (accepting.size    > 0) partitions.push(accepting);
+  if (nonAccepting.size > 0) partitions.push(nonAccepting);
+
+  const findPart = id => partitions.findIndex(p => p.has(id));
+
+  const steps = [];
+  steps.push({
+    label: 'Step 0 — Initial Partition',
+    desc: 'Separate accepting states (marked *) from non-accepting states. Two states in different partitions are NOT equivalent.',
+    partitions: partitions.map(p => [...p]),
+    acceptSet: [...accepting],
+    splitInfo: null
+  });
+
+  // 3. Refinement
+  let changed = true;
+  let iter = 0;
+  while (changed) {
+    changed = false;
+    iter++;
+    const newPartitions = [];
+    let splitDetails = [];
+    for (const group of partitions) {
+      if (group.size <= 1) { newPartitions.push(group); continue; }
+      const arr = [...group];
+      const subgroups = [new Set([arr[0]])];
+      for (let i = 1; i < arr.length; i++) {
+        const s = arr[i];
+        let placed = false;
+        for (const sub of subgroups) {
+          const rep = [...sub][0];
+          let dist = false;
+          let splitSym = '';
+          for (const sym of dfa.alphabet) {
+            const sTo  = (dfa.transitions.get(s)   || []).find(t => t.symbol === sym)?.to;
+            const rTo  = (dfa.transitions.get(rep) || []).find(t => t.symbol === sym)?.to;
+            const sP   = sTo  !== undefined ? findPart(sTo)  : -1;
+            const rP   = rTo  !== undefined ? findPart(rTo)  : -1;
+            if (sP !== rP) { dist = true; splitSym = sym; break; }
+          }
+          if (!dist) { sub.add(s); placed = true; break; }
+          else {
+            splitDetails.push(`q${s} ≠ q${rep} on '${splitSym}' (go to different partitions)`);
+          }
+        }
+        if (!placed) subgroups.push(new Set([s]));
+      }
+      if (subgroups.length > 1) changed = true;
+      for (const sg of subgroups) newPartitions.push(sg);
+    }
+    partitions = newPartitions;
+    if (changed) {
+      steps.push({
+        label: `Step ${iter} — Refinement`,
+        desc: splitDetails.length > 0 
+          ? `Split groups: ${splitDetails.slice(0,3).join('; ')}${splitDetails.length > 3 ? '...' : ''}`
+          : 'Split a group whose states disagree on at least one transition symbol.',
+        partitions: partitions.map(p => [...p]),
+        acceptSet: [...accepting],
+        splitInfo: splitDetails
+      });
+    }
+  }
+
+  steps.push({
+    label: 'Final Partition (Stable)',
+    desc: 'No more splits possible. All states within each partition are equivalent. Each partition becomes one state in the minimal DFA.',
+    partitions: partitions.map(p => [...p]),
+    acceptSet: [...accepting],
+    isFinal: true
+  });
+
+  // 4. Build minimal DFA
+  const stateMap = new Map();
+  partitions.forEach((group, idx) => group.forEach(s => stateMap.set(s, idx)));
+
+  const startPartIdx = stateMap.get(dfa.start);
+  const reorderMap = new Map();
+  reorderMap.set(startPartIdx, 0);
+  let nextId = 1;
+  for (let i = 0; i < partitions.length; i++) {
+    if (i !== startPartIdx) reorderMap.set(i, nextId++);
+  }
+
+  const minStates = partitions.map((group, idx) => {
+    const newId = reorderMap.get(idx);
+    const rep   = [...group][0];
+    const orig  = dfa.states.find(s => s.id === rep);
+    return {
+      id: newId,
+      isStart:  group.has(dfa.start),
+      isAccept: orig?.isAccept || false,
+      nfaStates: [...group].flatMap(s => dfa.states.find(st => st.id === s)?.nfaStates || []),
+      origStates: [...group],
+      key: [...group].map(s => {
+        const ds = dfa.states.find(st => st.id === s);
+        return ds ? ds.key : s;
+      }).join(' | ')
+    };
+  }).sort((a, b) => a.id - b.id);
+
+  const minTransitions = new Map();
+  partitions.forEach((group, idx) => {
+    const rep   = [...group][0];
+    const newId = reorderMap.get(idx);
+    for (const { symbol, to } of (dfa.transitions.get(rep) || [])) {
+      const toNew = reorderMap.get(stateMap.get(to));
+      if (toNew === undefined) continue;
+      if (!minTransitions.has(newId)) minTransitions.set(newId, []);
+      if (!minTransitions.get(newId).some(t => t.symbol === symbol))
+        minTransitions.get(newId).push({ symbol, to: toNew });
+    }
+  });
+
+  return {
+    states: minStates,
+    transitions: minTransitions,
+    start: 0,
+    alphabet: dfa.alphabet,
+    stateCount: minStates.length,
+    steps,
+    dfaStateCount: dfa.stateCount,
+    method: 'equivalence'
+  };
+}
+
+// ============================================================
+// MYHILL-NERODE METHOD MINIMIZATION (Table-Filling)
+// ============================================================
+
+function minimizeDfaMyhill(dfa) {
+  // 1. Get reachable states
+  const reachable = new Set();
+  const bfsQ = [dfa.start];
+  reachable.add(dfa.start);
+  while (bfsQ.length) {
+    const s = bfsQ.shift();
+    for (const { to } of (dfa.transitions.get(s) || [])) {
+      if (!reachable.has(to)) { reachable.add(to); bfsQ.push(to); }
+    }
+  }
+  const reachStates = dfa.states.filter(s => reachable.has(s.id)).sort((a,b) => a.id - b.id);
+  const ids = reachStates.map(s => s.id);
+  const n = ids.length;
+  const accepting = new Set(reachStates.filter(s => s.isAccept).map(s => s.id));
+
+  // 2. Build distinguishability table
+  // marked[i][j] where i > j; true = distinguishable
+  const marked = {};
+  const reason = {};
+  const getKey = (i, j) => i > j ? `${i},${j}` : `${j},${i}`;
+
+  const steps = [];
+
+  // Step 1: Mark pairs where one is accepting and other is not
+  const step1Pairs = [];
+  for (let i = 0; i < n; i++) {
+    for (let j = 0; j < i; j++) {
+      const qi = ids[i], qj = ids[j];
+      const k = getKey(qi, qj);
+      if (accepting.has(qi) !== accepting.has(qj)) {
+        marked[k] = true;
+        reason[k] = 'Base: one accept, one non-accept';
+        step1Pairs.push({ qi, qj, reason: reason[k] });
+      } else {
+        marked[k] = false;
+      }
+    }
+  }
+
+  steps.push({
+    type: 'base',
+    label: 'Step 1 — Base Case',
+    desc: `Mark all pairs (p, q) where one is accepting and the other is not. These are clearly distinguishable.`,
+    marked: { ...marked },
+    pairs: step1Pairs,
+    ids: [...ids],
+    accepting: [...accepting]
+  });
+
+  // Step 2: Iterative marking
+  let pass = 0;
+  let anyChange = true;
+  while (anyChange) {
+    anyChange = false;
+    pass++;
+    const passMarks = [];
+    for (let i = 0; i < n; i++) {
+      for (let j = 0; j < i; j++) {
+        const qi = ids[i], qj = ids[j];
+        const k = getKey(qi, qj);
+        if (marked[k]) continue;
+
+        for (const sym of dfa.alphabet) {
+          const ti = (dfa.transitions.get(qi) || []).find(t => t.symbol === sym)?.to;
+          const tj = (dfa.transitions.get(qj) || []).find(t => t.symbol === sym)?.to;
+          
+          if (ti === undefined && tj === undefined) continue;
+          if (ti === undefined || tj === undefined) {
+            marked[k] = true;
+            reason[k] = `Pass ${pass}: on '${sym}', one has no transition`;
+            passMarks.push({ qi, qj, sym, reason: reason[k] });
+            anyChange = true;
+            break;
+          }
+          if (ti === tj) continue;
+          const tk = getKey(ti, tj);
+          if (marked[tk]) {
+            marked[k] = true;
+            reason[k] = `Pass ${pass}: on '${sym}', δ(q${qi},${sym})=q${ti}, δ(q${qj},${sym})=q${tj} → (q${ti},q${tj}) is marked`;
+            passMarks.push({ qi, qj, sym, ti, tj, reason: reason[k] });
+            anyChange = true;
+            break;
+          }
+        }
+      }
+    }
+
+    if (passMarks.length > 0) {
+      steps.push({
+        type: 'pass',
+        label: `Step ${pass + 1} — Inductive Pass ${pass}`,
+        desc: `For each unmarked pair, check if transitions on any symbol lead to a marked pair. If so, mark it.`,
+        marked: { ...marked },
+        newMarks: passMarks,
+        ids: [...ids],
+        accepting: [...accepting]
+      });
+    }
+  }
+
+  // Step 3: Find equivalent pairs (unmarked)
+  const equivalentPairs = [];
+  for (let i = 0; i < n; i++) {
+    for (let j = 0; j < i; j++) {
+      const qi = ids[i], qj = ids[j];
+      const k = getKey(qi, qj);
+      if (!marked[k]) {
+        equivalentPairs.push({ qi, qj });
+      }
+    }
+  }
+
+  steps.push({
+    type: 'result',
+    label: 'Result — Equivalent Pairs',
+    desc: equivalentPairs.length > 0
+      ? `Unmarked pairs are equivalent and can be merged: ${equivalentPairs.map(p => `(q${p.qi}, q${p.qj})`).join(', ')}`
+      : 'No equivalent pairs found — the DFA is already minimal.',
+    equivalentPairs,
+    marked: { ...marked },
+    ids: [...ids],
+    accepting: [...accepting]
+  });
+
+  // Build partitions from equivalence classes
+  const parent = {};
+  ids.forEach(id => parent[id] = id);
+  const find = (x) => { while (parent[x] !== x) parent[x] = parent[parent[x]], x = parent[x]; return x; };
+  const union = (a, b) => { parent[find(b)] = find(a); };
+  for (const { qi, qj } of equivalentPairs) union(qi, qj);
+
+  const groups = new Map();
+  for (const id of ids) {
+    const root = find(id);
+    if (!groups.has(root)) groups.set(root, new Set());
+    groups.get(root).add(id);
+  }
+  const partitions = [...groups.values()];
+
+  // Build minimal DFA
+  const stateMap = new Map();
+  partitions.forEach((group, idx) => group.forEach(s => stateMap.set(s, idx)));
+
+  const startPartIdx = stateMap.get(dfa.start);
+  const reorderMap = new Map();
+  reorderMap.set(startPartIdx, 0);
+  let nextId = 1;
+  for (let i = 0; i < partitions.length; i++) {
+    if (i !== startPartIdx) reorderMap.set(i, nextId++);
+  }
+
+  const minStates = partitions.map((group, idx) => {
+    const newId = reorderMap.get(idx);
+    const rep = [...group][0];
+    const orig = dfa.states.find(s => s.id === rep);
+    return {
+      id: newId,
+      isStart: group.has(dfa.start),
+      isAccept: orig?.isAccept || false,
+      nfaStates: [...group].flatMap(s => dfa.states.find(st => st.id === s)?.nfaStates || []),
+      origStates: [...group],
+      key: [...group].map(s => {
+        const ds = dfa.states.find(st => st.id === s);
+        return ds ? ds.key : s;
+      }).join(' | ')
+    };
+  }).sort((a, b) => a.id - b.id);
+
+  const minTransitions = new Map();
+  partitions.forEach((group, idx) => {
+    const rep = [...group][0];
+    const newId = reorderMap.get(idx);
+    for (const { symbol, to } of (dfa.transitions.get(rep) || [])) {
+      const toNew = reorderMap.get(stateMap.get(to));
+      if (toNew === undefined) continue;
+      if (!minTransitions.has(newId)) minTransitions.set(newId, []);
+      if (!minTransitions.get(newId).some(t => t.symbol === symbol))
+        minTransitions.get(newId).push({ symbol, to: toNew });
+    }
+  });
+
+  return {
+    states: minStates,
+    transitions: minTransitions,
+    start: 0,
+    alphabet: dfa.alphabet,
+    stateCount: minStates.length,
+    steps,
+    dfaStateCount: dfa.stateCount,
+    method: 'myhill'
+  };
+}
+
+// ============================================================
+// STATE / DISPLAY
+// ============================================================
+
+let currentEnfa = null, currentNfa = null, currentDfa = null;
+let currentMinEquiv = null, currentMinMyhill = null;
+let currentMode = 'enfa';
+let currentRegex = '';
+let currentPostfix = [];
+let simulatedPath = null;
+let hoverNfaStates = null;
+let hoverDfaState = null;
+let hoverDfaFromState = null;
+
+let canvasScale = 1, panX = 0, panY = 0, isPanning = false, lastPan = null;
+let nodePositions = [];
+let edges = [];
+
+const canvas = document.getElementById('main-canvas');
+const ctx = canvas.getContext('2d');
+
+function resizeCanvas() {
+  const rect = canvas.parentElement.getBoundingClientRect();
+  canvas.width = rect.width;
+  canvas.height = rect.height;
+  render();
+}
+window.addEventListener('resize', resizeCanvas);
+
+canvas.addEventListener('mousedown', e => { if (handModeActive) return; isPanning = true; lastPan = {x: e.clientX, y: e.clientY}; });
+canvas.addEventListener('mousemove', e => {
+  if (handModeActive) return;
+  if (!isPanning) return;
+  panX += e.clientX - lastPan.x;
+  panY += e.clientY - lastPan.y;
+  lastPan = {x: e.clientX, y: e.clientY};
+  render();
+});
+canvas.addEventListener('mouseup', () => { if (handModeActive) return; isPanning = false; });
+canvas.addEventListener('mouseleave', () => { if (handModeActive) return; isPanning = false; });
+canvas.addEventListener('wheel', e => {
+  if (handModeActive) return;
+  e.preventDefault();
+  const factor = e.deltaY < 0 ? 1.1 : 0.9;
+  const rect = canvas.getBoundingClientRect();
+  const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+  panX = mx - factor*(mx - panX);
+  panY = my - factor*(my - panY);
+  canvasScale *= factor;
+  render();
+}, { passive: false });
+
+canvas.addEventListener('touchstart', e => { if(e.touches.length===1){isPanning=true;lastPan={x:e.touches[0].clientX,y:e.touches[0].clientY};} });
+canvas.addEventListener('touchmove', e => { e.preventDefault(); if(!isPanning||e.touches.length!==1)return; panX+=e.touches[0].clientX-lastPan.x; panY+=e.touches[0].clientY-lastPan.y; lastPan={x:e.touches[0].clientX,y:e.touches[0].clientY}; render(); }, {passive:false});
+canvas.addEventListener('touchend', ()=>isPanning=false);
+
+// ============================================================
+// LAYOUT
+// ============================================================
+
+function layoutNfa(nfa) {
+  const { start, accept, transitions, stateCount } = nfa;
+  const acceptStates = nfa.acceptStates ? nfa.acceptStates : new Set([accept]);
+  const layers = new Map();
+  const visited = new Set();
+  const queue = [{state: start, layer: 0}];
+  layers.set(start, 0);
+
+  while (queue.length) {
+    const { state, layer } = queue.shift();
+    if (visited.has(state)) continue;
+    visited.add(state);
+    const trans = transitions.get(state) || [];
+    for (const { to } of trans) {
+      if (!layers.has(to)) {
+        layers.set(to, layer + 1);
+        queue.push({state: to, layer: layer + 1});
+      }
+    }
+  }
+  for (let i = 0; i < stateCount; i++) {
+    if (!layers.has(i)) { layers.set(i, 8); }
+  }
+
+  const layerGroups = new Map();
+  for (const [state, layer] of layers) {
+    if (!layerGroups.has(layer)) layerGroups.set(layer, []);
+    layerGroups.get(layer).push(state);
+  }
+
+  const MIN_SEP = 220;
+  const HORIZ_GAP = 300;
+  const positions = new Map();
+
+  for (const [layer, ids] of layerGroups) {
+    const total = ids.length;
+    ids.forEach((id, idx) => {
+      positions.set(id, {
+        x: 130 + layer * HORIZ_GAP,
+        y: (idx - (total - 1) / 2) * MIN_SEP
+      });
+    });
+  }
+
+  const allStateIds = [...layers.keys()];
+  for (let iter = 0; iter < 120; iter++) {
+    const forces = new Map();
+    allStateIds.forEach(id => forces.set(id, 0));
+
+    for (let i = 0; i < allStateIds.length; i++) {
+      for (let j = i + 1; j < allStateIds.length; j++) {
+        const pi = positions.get(allStateIds[i]), pj = positions.get(allStateIds[j]);
+        if (!pi || !pj) continue;
+        const dx = pi.x - pj.x, dy = pi.y - pj.y;
+        const dist2 = dx*dx + dy*dy || 0.01;
+        const dist = Math.sqrt(dist2);
+        if (dist < MIN_SEP * 2.2) {
+          const rep = 5000 / dist2;
+          const fy = rep * (dy / dist);
+          forces.set(allStateIds[i], forces.get(allStateIds[i]) + fy);
+          forces.set(allStateIds[j], forces.get(allStateIds[j]) - fy);
+        }
+      }
+    }
+
+    for (const [from, trans] of transitions) {
+      for (const { to } of trans) {
+        if (from === to) continue;
+        const pf = positions.get(from), pt = positions.get(to);
+        if (!pf || !pt) continue;
+        const dy = pt.y - pf.y;
+        forces.set(from, forces.get(from) + dy * 0.025);
+        forces.set(to,   forces.get(to)   - dy * 0.025);
+      }
+    }
+
+    allStateIds.forEach(id => {
+      const p = positions.get(id);
+      if (p) p.y += Math.max(-18, Math.min(18, forces.get(id)));
+    });
+  }
+
+  for (const [, ids] of layerGroups) {
+    ids.sort((a, b) => positions.get(a).y - positions.get(b).y);
+    for (let i = 1; i < ids.length; i++) {
+      const prev = positions.get(ids[i - 1]);
+      const curr = positions.get(ids[i]);
+      if (curr.y - prev.y < MIN_SEP) curr.y = prev.y + MIN_SEP;
+    }
+    const ys = ids.map(id => positions.get(id).y);
+    const mid = (Math.min(...ys) + Math.max(...ys)) / 2;
+    ids.forEach(id => { positions.get(id).y -= mid; });
+  }
+
+  const allYs = allStateIds.map(id => positions.get(id).y);
+  const minY = Math.min(...allYs);
+  allStateIds.forEach(id => { positions.get(id).y += 130 - minY; });
+
+  return allStateIds.map(id => ({
+    id,
+    x: positions.get(id).x,
+    y: positions.get(id).y,
+    isStart: id === start,
+    isAccept: acceptStates.has ? acceptStates.has(id) : id === accept
+  }));
+}
+
+function layoutDfa(dfa) {
+  const { states, transitions } = dfa;
+  const n = states.length;
+  if (n === 0) return [];
+
+  const layers = new Map();
+  states.forEach(s => layers.set(s.id, -1));
+  layers.set(0, 0);
+  const bfsQ = [0];
+  while (bfsQ.length) {
+    const id = bfsQ.shift();
+    const trans = transitions.get(id) || [];
+    for (const { to } of trans) {
+      if (layers.get(to) === -1) {
+        layers.set(to, layers.get(id) + 1);
+        bfsQ.push(to);
+      }
+    }
+  }
+  states.forEach(s => { if (layers.get(s.id) === -1) layers.set(s.id, 0); });
+
+  const layerGroups = new Map();
+  for (const s of states) {
+    const l = layers.get(s.id);
+    if (!layerGroups.has(l)) layerGroups.set(l, []);
+    layerGroups.get(l).push(s.id);
+  }
+
+  const MIN_SEP = 220;
+  const HORIZ_GAP = 300;
+  const positions = new Map();
+
+  for (const [layer, ids] of layerGroups) {
+    const total = ids.length;
+    ids.forEach((id, idx) => {
+      positions.set(id, {
+        x: 120 + layer * HORIZ_GAP,
+        y: (idx - (total - 1) / 2) * MIN_SEP
+      });
+    });
+  }
+
+  for (let iter = 0; iter < 120; iter++) {
+    const forces = new Map();
+    states.forEach(s => forces.set(s.id, 0));
+    const allIds = states.map(s => s.id);
+    for (let i = 0; i < allIds.length; i++) {
+      for (let j = i + 1; j < allIds.length; j++) {
+        const pi = positions.get(allIds[i]), pj = positions.get(allIds[j]);
+        const dx = pi.x - pj.x, dy = pi.y - pj.y;
+        const dist2 = dx*dx + dy*dy || 0.01;
+        const dist = Math.sqrt(dist2);
+        if (dist < MIN_SEP * 2.2) {
+          const rep = 5000 / dist2;
+          const fy = rep * (dy / dist);
+          forces.set(allIds[i], forces.get(allIds[i]) + fy);
+          forces.set(allIds[j], forces.get(allIds[j]) - fy);
+        }
+      }
+    }
+    for (const [from, trans] of transitions) {
+      for (const { to } of trans) {
+        if (from === to) continue;
+        const pf = positions.get(from), pt = positions.get(to);
+        if (!pf || !pt) continue;
+        const dy = pt.y - pf.y;
+        forces.set(from, forces.get(from) + dy * 0.025);
+        forces.set(to,   forces.get(to)   - dy * 0.025);
+      }
+    }
+    for (const s of states) {
+      const p = positions.get(s.id);
+      p.y += Math.max(-18, Math.min(18, forces.get(s.id)));
+    }
+  }
+
+  for (const [, ids] of layerGroups) {
+    ids.sort((a, b) => positions.get(a).y - positions.get(b).y);
+    for (let i = 1; i < ids.length; i++) {
+      const prev = positions.get(ids[i - 1]);
+      const curr = positions.get(ids[i]);
+      if (curr.y - prev.y < MIN_SEP) curr.y = prev.y + MIN_SEP;
+    }
+    const ys = ids.map(id => positions.get(id).y);
+    const mid = (Math.min(...ys) + Math.max(...ys)) / 2;
+    ids.forEach(id => { positions.get(id).y -= mid; });
+  }
+
+  const allYs = states.map(s => positions.get(s.id).y);
+  const minY = Math.min(...allYs);
+  states.forEach(s => { positions.get(s.id).y += 130 - minY; });
+
+  return states.map(s => {
+    const p = positions.get(s.id) || { x: 120, y: 130 };
+    return { id: s.id, label: s.label, x: p.x, y: p.y, isStart: s.isStart, isAccept: s.isAccept };
+  });
+}
+
+function buildEdges(nfa) {
+  const edgeMap = new Map();
+  for (const [from, trans] of nfa.transitions) {
+    for (const { symbol, to } of trans) {
+      const key = `${from}-${to}`;
+      if (!edgeMap.has(key)) edgeMap.set(key, { from, to, symbols: [] });
+      if (!edgeMap.get(key).symbols.includes(symbol))
+        edgeMap.get(key).symbols.push(symbol);
+    }
+  }
+  const selfLoopSlots = new Map();
+  const result = [];
+  for (const e of edgeMap.values()) {
+    if (e.from === e.to) {
+      const slot = selfLoopSlots.get(e.from) || 0;
+      selfLoopSlots.set(e.from, slot + 1);
+      result.push({ from: e.from, to: e.to, label: e.symbols.join(','), selfSlot: slot });
+    } else {
+      result.push({ from: e.from, to: e.to, label: e.symbols.join(',') });
+    }
+  }
+  return result;
+}
+
+function buildDfaEdges(dfa) {
+  const edgeMap = new Map();
+  for (const [from, trans] of dfa.transitions) {
+    for (const { symbol, to } of trans) {
+      const key = `${from}-${to}`;
+      if (!edgeMap.has(key)) edgeMap.set(key, { from, to, symbols: [] });
+      edgeMap.get(key).symbols.push(symbol);
+    }
+  }
+  const selfLoopSlots = new Map();
+  const result = [];
+  for (const e of edgeMap.values()) {
+    if (e.from === e.to) {
+      const slot = selfLoopSlots.get(e.from) || 0;
+      selfLoopSlots.set(e.from, slot + 1);
+      result.push({ from: e.from, to: e.to, label: e.symbols.join(','), selfSlot: slot });
+    } else {
+      result.push({ from: e.from, to: e.to, label: e.symbols.join(',') });
+    }
+  }
+  return result;
+}
+
+// ============================================================
+// RENDER
+// ============================================================
+
+const R = 36;
+
+function worldToScreen(x, y) {
+  return [x * canvasScale + panX, y * canvasScale + panY];
+}
+
+function render() {
+  if (!canvas.width) return;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  if (!nodePositions.length) return;
+
+  ctx.save();
+
+  for (const edge of edges) {
+    const fromNode = nodePositions.find(n => n.id === edge.from);
+    const toNode = nodePositions.find(n => n.id === edge.to);
+    if (!fromNode || !toNode) continue;
+
+    const isSelf = edge.from === edge.to;
+    const isHighlighted = simulatedPath && simulatedPath.some(p => p.from === edge.from && p.to === edge.to);
+
+    const [x1, y1] = worldToScreen(fromNode.x, fromNode.y);
+    const [x2, y2] = worldToScreen(toNode.x, toNode.y);
+    const r = R * canvasScale;
+
+    ctx.save();
+    const edgeColor = isHighlighted ? '#b84b22' : '#6b5a48';
+    const isEps = edge.label === EPSILON;
+    ctx.strokeStyle = edgeColor;
+    ctx.lineWidth = (isHighlighted ? 4 : 2) * canvasScale;
+    
+    if (isHighlighted) {
+      ctx.shadowColor = '#b84b22';
+      ctx.shadowBlur = 10;
+    }
+
+    if (isEps && !isHighlighted) ctx.setLineDash([6 * canvasScale, 4 * canvasScale]);
+
+    if (isSelf) {
+      const slot = edge.selfSlot || 0;
+      const angleOffsets = [0, Math.PI / 5, -Math.PI / 5, Math.PI * 2 / 5, -Math.PI * 2 / 5];
+      const loopAngle = -Math.PI / 2 + (angleOffsets[slot] || slot * Math.PI / 5);
+      
+      const cpDist = 3.5 * r;
+      const cpAngle1 = loopAngle - 0.7;
+      const cpAngle2 = loopAngle + 0.7;
+      
+      const cp1x = x1 + Math.cos(cpAngle1) * cpDist;
+      const cp1y = y1 + Math.sin(cpAngle1) * cpDist;
+      const cp2x = x1 + Math.cos(cpAngle2) * cpDist;
+      const cp2y = y1 + Math.sin(cpAngle2) * cpDist;
+      
+      const startAngle = loopAngle - 0.35;
+      const startX = x1 + Math.cos(startAngle) * r;
+      const startY = y1 + Math.sin(startAngle) * r;
+      const endAngle = loopAngle + 0.35;
+      const endX = x1 + Math.cos(endAngle) * r;
+      const endY = y1 + Math.sin(endAngle) * r;
+      
+      ctx.beginPath();
+      ctx.moveTo(startX, startY);
+      ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, endX, endY);
+      ctx.stroke();
+
+      const arrAngle = Math.atan2(endY - cp2y, endX - cp2x);
+      drawArrowHead(ctx, endX, endY, arrAngle, edgeColor);
+
+      const labelDist = cpDist * 0.75;
+      const labelX = x1 + Math.cos(loopAngle) * labelDist;
+      const labelY = y1 + Math.sin(loopAngle) * labelDist;
+      drawEdgeLabel(ctx, labelX, labelY, edge.label, canvasScale, isHighlighted);
+    } else {
+      const hasReverse = edges.some(e => e.from === edge.to && e.to === edge.from);
+      const dx = x2 - x1, dy = y2 - y1;
+      const dist = Math.sqrt(dx*dx + dy*dy) || 1;
+      const nx = -dy / dist, ny = dx / dist;
+
+      const isBack = fromNode.x >= toNode.x - 10;
+      let curveMag;
+      if (isBack) {
+        curveMag = Math.max(120, dist * 0.45) * canvasScale;
+      } else if (hasReverse) {
+        curveMag = 85 * canvasScale;
+      } else {
+        curveMag = 35 * canvasScale;
+      }
+
+      const cpx = (x1 + x2) / 2 + nx * curveMag;
+      const cpy = (y1 + y2) / 2 + ny * curveMag;
+
+      const sdx = cpx - x1, sdy = cpy - y1, sl = Math.sqrt(sdx*sdx+sdy*sdy)||1;
+      const startX = x1 + (sdx/sl) * r;
+      const startY = y1 + (sdy/sl) * r;
+
+      const edx = x2 - cpx, edy = y2 - cpy, el2 = Math.sqrt(edx*edx+edy*edy)||1;
+      const endX = x2 - (edx/el2) * r;
+      const endY = y2 - (edy/el2) * r;
+
+      ctx.beginPath();
+      ctx.moveTo(startX, startY);
+      ctx.quadraticCurveTo(cpx, cpy, endX, endY);
+      ctx.stroke();
+
+      const arrowAngle = Math.atan2(endY - cpy, endX - cpx);
+      drawArrowHead(ctx, endX, endY, arrowAngle, edgeColor);
+
+      const labelX = 0.25*startX + 0.5*cpx + 0.25*endX;
+      const labelY = 0.25*startY + 0.5*cpy + 0.25*endY;
+      drawEdgeLabel(ctx, labelX, labelY, edge.label, canvasScale, isHighlighted);
+    }
+    ctx.restore();
+  }
+
+  // Draw nodes
+  for (const node of nodePositions) {
+    const [cx, cy] = worldToScreen(node.x, node.y);
+    const r = R * canvasScale;
+    const isInPath = simulatedPath && simulatedPath.some(p => p.state === node.id);
+    const isHovered = (hoverNfaStates && hoverNfaStates.includes(node.id)) ||
+                      (hoverDfaState === node.id || hoverDfaFromState === node.id);
+
+    if (node.isStart) {
+      ctx.save();
+      ctx.strokeStyle = '#d29922';
+      ctx.lineWidth = 2 * canvasScale;
+      ctx.beginPath();
+      ctx.moveTo(cx - r - 28 * canvasScale, cy);
+      ctx.lineTo(cx - r, cy);
+      ctx.stroke();
+      drawArrowHead(ctx, cx - r, cy, 0, '#d29922');
+      ctx.restore();
+    }
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    
+    if (isInPath || isHovered) {
+      ctx.fillStyle = 'rgba(184,75,34,0.15)';
+      ctx.shadowColor = 'rgba(184,75,34,0.5)';
+      ctx.shadowBlur = 12 * canvasScale;
+    } else if (node.isAccept) {
+      ctx.fillStyle = 'rgba(45,122,62,0.1)';
+      ctx.shadowColor = 'rgba(45,122,62,0.3)';
+      ctx.shadowBlur = 8 * canvasScale;
+    } else if (node.isStart) {
+      ctx.fillStyle = 'rgba(166,106,26,0.1)';
+      ctx.shadowColor = 'rgba(166,106,26,0.3)';
+      ctx.shadowBlur = 8 * canvasScale;
+    } else {
+      ctx.fillStyle = 'rgba(250,247,242,0.95)';
+    }
+    ctx.fill();
+
+    ctx.lineWidth = (node.isStart ? 2 : 1.5) * canvasScale;
+    if (isInPath || isHovered) ctx.strokeStyle = '#b84b22';
+    else if (node.isAccept) ctx.strokeStyle = '#2d7a3e';
+    else if (node.isStart) ctx.strokeStyle = '#a66a1a';
+    else ctx.strokeStyle = '#6b5a48';
+    ctx.stroke();
+    
+    ctx.restore();
+
+    if (node.isAccept) {
+      ctx.beginPath();
+      ctx.arc(cx, cy, r - 5 * canvasScale, 0, Math.PI * 2);
+      ctx.strokeStyle = (isInPath || isHovered) ? '#b84b22' : '#2d7a3e';
+      ctx.lineWidth = 1 * canvasScale;
+      ctx.stroke();
+    }
+
+    let pfx = 'q';
+    if (currentMode === 'minequiv') pfx = 'E';
+    else if (currentMode === 'minmyhill') pfx = 'M';
+    let label = node.label || (pfx + node.id);
+    
+    ctx.fillStyle = (isInPath || isHovered) ? '#504030' : '#3c3228';
+    ctx.font = `${currentMode.startsWith('min') ? 'bold ' : ''}${Math.max(13, 16 * canvasScale)}px 'JetBrains Mono', monospace`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(label, cx, cy);
+  }
+
+  ctx.restore();
+}
+
+function drawArrowHead(ctx, x, y, angle, color) {
+  const size = 12 * canvasScale;
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(angle);
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.moveTo(0, 0);
+  ctx.lineTo(-size, -size * 0.45);
+  ctx.lineTo(-size, size * 0.45);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawEdgeLabel(ctx, x, y, label, scale, isHighlighted=false) {
+  const fs = Math.max(12, 14 * scale);
+  ctx.font = `${fs}px 'JetBrains Mono', monospace`;
+  const w = ctx.measureText(label).width + 12;
+  ctx.fillStyle = 'rgba(250, 247, 242, 0.95)';
+  ctx.fillRect(x - w / 2, y - fs * 0.8, w, fs * 1.4);
+  const isEps = label === EPSILON || label.includes(EPSILON);
+  if (isHighlighted) {
+    ctx.fillStyle = '#b84b22';
+  } else {
+    ctx.fillStyle = isEps ? '#8b7a66' : '#3c3228';
+  }
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(label, x, y + fs * 0.1);
+}
+
+function zoomFit() {
+  if (!nodePositions.length) return;
+  const xs = nodePositions.map(n => n.x);
+  const ys = nodePositions.map(n => n.y);
+  const minX = Math.min(...xs), maxX = Math.max(...xs);
+  const minY = Math.min(...ys), maxY = Math.max(...ys);
+  
+  const pad = 100;
+  const boundX = minX - pad, boundY = minY - pad;
+  const boundW = (maxX - minX) + 2 * pad;
+  const boundH = (maxY - minY) + 2 * pad;
+  
+  const isSidebarOpen = !document.getElementById('sidebar').classList.contains('collapsed');
+  const sidebarOffset = isSidebarOpen ? 420 : 0;
+  
+  const availableWidth  = (canvas.width - sidebarOffset) * 0.88;
+  const availableHeight = canvas.height * 0.88;
+  const scaleX = availableWidth  / boundW;
+  const scaleY = availableHeight / boundH;
+  canvasScale = Math.min(scaleX, scaleY, 1.4);
+
+  const TOP_MARGIN = 24;
+  const LEFT_MARGIN = ((canvas.width - sidebarOffset) - boundW * canvasScale) / 2;
+  panX = LEFT_MARGIN - boundX * canvasScale;
+  panY = TOP_MARGIN  - boundY * canvasScale;
+  
+  render();
+}
+
+function resetView() {
+  canvasScale = 1; panX = 0; panY = 0;
+  render();
+}
+
+// ============================================================
+// TRANSITION TABLE
+// ============================================================
+
+function buildTransitionTable(source) {
+  const table = document.getElementById('trans-table');
+  
+  if (currentMode === 'enfa') {
+    // ε-NFA table
+    const nfa = currentEnfa;
+    const syms = new Set([EPSILON]);
+    for (const [, trans] of nfa.transitions) for (const {symbol} of trans) syms.add(symbol);
+    const symList = [...syms].sort((a,b) => a===EPSILON?-1:b===EPSILON?1:a.localeCompare(b));
+    let html = '<tr><th>State</th>' + symList.map(s=>`<th>${s}</th>`).join('') + '</tr>';
+    for (let i = 0; i < nfa.stateCount; i++) {
+      const trans = nfa.transitions.get(i) || [];
+      const isStart = i === nfa.start, isAccept = i === nfa.accept;
+      let row = `<tr><td class="${isStart?'start-state':''} ${isAccept?'accept-state':''}">`;
+      row += `${isStart?'→':''}q${i}${isAccept?'*':''}</td>`;
+      for (const sym of symList) {
+        const tos = trans.filter(t=>t.symbol===sym).map(t=>'q'+t.to);
+        row += `<td>${tos.length?tos.join(','):'∅'}</td>`;
+      }
+      row += '</tr>';
+      html += row;
+    }
+    table.innerHTML = html;
+  } else if (currentMode === 'nfa' && currentNfa) {
+    // NFA table (no epsilon)
+    const nfa = currentNfa;
+    const symList = nfa.alphabet;
+    let html = '<tr><th>State</th>' + symList.map(s=>`<th>${s}</th>`).join('') + '</tr>';
+    for (let i = 0; i < nfa.stateCount; i++) {
+      const trans = nfa.transitions.get(i) || [];
+      const isStart = i === nfa.start;
+      const isAccept = nfa.acceptStates.has(i);
+      let row = `<tr><td class="${isStart?'start-state':''} ${isAccept?'accept-state':''}">`;
+      row += `${isStart?'→':''}q${i}${isAccept?'*':''}</td>`;
+      for (const sym of symList) {
+        const tos = trans.filter(t=>t.symbol===sym).map(t=>'q'+t.to);
+        row += `<td>${tos.length?tos.join(','):'∅'}</td>`;
+      }
+      row += '</tr>';
+      html += row;
+    }
+    table.innerHTML = html;
+  } else if (currentMode === 'dfa' && currentDfa) {
+    const dfa = currentDfa;
+    const syms = dfa.alphabet;
+    let html = '<tr><th>State</th>' + syms.map(s=>`<th>${s}</th>`).join('') + '</tr>';
+    const byId = new Map(dfa.states.map(state => [state.id, state]));
+    for (const state of dfa.states) {
+      const trans = dfa.transitions.get(state.id) || [];
+      let row = `<tr>`;
+      row += `<td class="${state.isStart?'start-state':''} ${state.isAccept?'accept-state':''}">`;
+      row += `${state.isStart?'→':''}${escapeHtml(state.label || ('q' + state.id))}${state.isAccept?'*':''}</td>`;
+      for (const sym of syms) {
+        const t = trans.find(t => t.symbol === sym);
+        row += `<td>${t ? escapeHtml((byId.get(t.to)?.label) || ('q' + t.to)) : '∅'}</td>`;
+      }
+      row += '</tr>';
+      html += row;
+    }
+    table.innerHTML = html;
+  } else if (currentMode === 'minequiv' && currentMinEquiv) {
+    buildMinDfaTransitionTable(currentMinEquiv, 'E');
+  } else if (currentMode === 'minmyhill' && currentMinMyhill) {
+    buildMinDfaTransitionTable(currentMinMyhill, 'M');
+  }
+}
+
+function buildMinDfaTransitionTable(minDfa, prefix) {
+  const table = document.getElementById('trans-table');
+  const syms = minDfa.alphabet;
+  let html = '<tr><th>State</th>' + syms.map(s=>`<th>${s}</th>`).join('') + '</tr>';
+  for (const state of minDfa.states) {
+    const trans = minDfa.transitions.get(state.id) || [];
+    let row = `<tr>`;
+    row += `<td class="${state.isStart?'start-state':''} ${state.isAccept?'accept-state':''}">`;
+    row += `${state.isStart?'→':''}${prefix}${state.id}${state.isAccept?'*':''}</td>`;
+    for (const sym of syms) {
+      const t = trans.find(t => t.symbol === sym);
+      row += `<td>${t ? prefix+t.to : '∅'}</td>`;
+    }
+    row += '</tr>';
+    html += row;
+  }
+  table.innerHTML = html;
+}
+
+// ============================================================
+// THOMPSON VISUALIZATION
+// ============================================================
+
+let thompsonSteps = [];
+
+function visualizeThompsonConstruction(postfix) {
+  thompsonSteps = [];
+  const steps = [];
+  
+  steps.push({
+    type: 'input',
+    label: 'Input Regex',
+    value: postfix,
+    description: 'Postfix notation after converting infix → postfix'
+  });
+
+  const operators = {
+    '|': { name: 'Union', desc: 'Accepts either left OR right pattern' },
+    '·': { name: 'Concatenation', desc: 'Accepts left THEN right pattern' },
+    '*': { name: 'Kleene Star', desc: 'Zero or more repetitions' },
+    '+': { name: 'Plus', desc: 'One or more repetitions' },
+    '?': { name: 'Optional', desc: 'Zero or one occurrence' }
+  };
+
+  let operatorCount = {};
+  for (let i = 0; i < postfix.length; i++) {
+    const char = postfix[i];
+    if (operators[char]) {
+      const opInfo = operators[char];
+      operatorCount[char] = (operatorCount[char] || 0) + 1;
+      steps.push({
+        type: 'operator',
+        operator: char,
+        label: `${opInfo.name} (${operatorCount[char]})`,
+        description: opInfo.desc,
+        index: i
+      });
+    } else if (char !== EPSILON) {
+      steps.push({
+        type: 'symbol',
+        symbol: char,
+        label: `Symbol: '${char}'`,
+        description: 'Literal symbol in alphabet',
+        index: i
+      });
+    }
+  }
+
+  steps.push({
+    type: 'summary',
+    label: 'Final ε-NFA',
+    description: `Constructed ε-NFA with all operators combined`
+  });
+
+  thompsonSteps = steps;
+  renderThompsonPanel();
+}
+
+function renderThompsonPanel() {
+  const overviewEl = document.getElementById('thompson-overview');
+  const operatorsEl = document.getElementById('thompson-operators');
+  
+  let overviewHTML = '';
+  for (const step of thompsonSteps) {
+    overviewHTML += `
+      <div class="step-card ${step.index === 0 ? 'highlight' : ''}">
+        <div class="step-label">${step.label}</div>
+        <div class="step-desc">${step.description}</div>
+        ${step.value ? `<div class="thompson-code">${step.value}</div>` : ''}
+        ${step.symbol ? `<div class="svg-container">
+          <svg width="120" height="40" viewBox="0 0 120 40">
+             <defs>
+               <marker id="arr" viewBox="0 -5 10 10" refX="20" refY="0" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,-5L10,0L0,5" fill="#6b5a48"/></marker>
+             </defs>
+             <circle cx="30" cy="20" r="12" fill="rgba(210,153,34,0.15)" stroke="#d29922" stroke-width="1.5"/>
+             <text x="30" y="24" font-family="var(--mono)" font-size="11" fill="#3c3228" text-anchor="middle">i</text>
+             <line x1="30" y1="20" x2="90" y2="20" stroke="#6b5a48" stroke-width="1.5" marker-end="url(#arr)"/>
+             <rect x="52" y="10" width="16" height="14" fill="var(--surface3)" rx="2"/>
+             <text x="60" y="21" font-family="var(--mono)" font-size="11" fill="#b84b22" text-anchor="middle" font-weight="700">${step.symbol}</text>
+             <circle cx="90" cy="20" r="12" fill="rgba(46,160,67,0.1)" stroke="#3fb950" stroke-width="1.5"/>
+             <circle cx="90" cy="20" r="8" fill="none" stroke="#3fb950" stroke-width="1"/>
+             <text x="90" y="24" font-family="var(--mono)" font-size="11" fill="#3c3228" text-anchor="middle">f</text>
+          </svg>
+        </div>` : ''}
+      </div>
+    `;
+  }
+  overviewEl.innerHTML = overviewHTML;
+
+  const operatorsHTML = `
+      <div class="step-card">
+        <div class="step-label">Union (A | B)</div>
+        <div class="step-desc">Create start state with ε-transitions to both branches, both branches ε-transition to final state</div>
+        <div class="svg-container">
+          <svg width="200" height="100" viewBox="0 0 200 100">
+             <defs><marker id="arr2" viewBox="0 -5 10 10" refX="24" refY="0" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,-5L10,0L0,5" fill="#6b5a48"/></marker></defs>
+             <g stroke="#6b5a48" stroke-width="1.5" fill="none">
+               <path d="M 30,50 Q 60,20 80,20" marker-end="url(#arr2)"/>
+               <path d="M 30,50 Q 60,80 80,80" marker-end="url(#arr2)"/>
+               <path d="M 120,20 Q 140,20 170,50" marker-end="url(#arr2)"/>
+               <path d="M 120,80 Q 140,80 170,50" marker-end="url(#arr2)"/>
+             </g>
+             <g font-family="var(--mono)" font-size="10" fill="#6b5a48" text-anchor="middle">
+               <text x="50" y="30">ε</text><text x="50" y="77">ε</text>
+               <text x="150" y="30">ε</text><text x="150" y="77">ε</text>
+             </g>
+             <circle cx="30" cy="50" r="14" fill="rgba(210,153,34,0.15)" stroke="#d29922" stroke-width="1.5"/>
+             <text x="30" y="54" font-family="var(--mono)" font-size="11" fill="#3c3228" text-anchor="middle">s</text>
+             <rect x="80" y="5" width="40" height="30" rx="4" fill="rgba(184,75,34,0.05)" stroke="#b84b22" stroke-width="1.5" stroke-dasharray="4 2"/>
+             <text x="100" y="24" font-family="var(--sans)" font-size="12" fill="#b84b22" font-weight="600" text-anchor="middle">A</text>
+             <rect x="80" y="65" width="40" height="30" rx="4" fill="rgba(184,75,34,0.05)" stroke="#b84b22" stroke-width="1.5" stroke-dasharray="4 2"/>
+             <text x="100" y="84" font-family="var(--sans)" font-size="12" fill="#b84b22" font-weight="600" text-anchor="middle">B</text>
+             <circle cx="170" cy="50" r="14" fill="rgba(46,160,67,0.1)" stroke="#3fb950" stroke-width="1.5"/>
+             <circle cx="170" cy="50" r="10" fill="none" stroke="#3fb950" stroke-width="1"/>
+             <text x="170" y="54" font-family="var(--mono)" font-size="11" fill="#3c3228" text-anchor="middle">f</text>
+          </svg>
+        </div>
+      </div>
+      
+      <div class="step-card">
+        <div class="step-label">Concatenation (A · B)</div>
+        <div class="step-desc">Connect accept state of A to start state of B via ε</div>
+        <div class="svg-container">
+          <svg width="200" height="60" viewBox="0 0 200 60">
+             <defs><marker id="arr3" viewBox="0 -5 10 10" refX="24" refY="0" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,-5L10,0L0,5" fill="#6b5a48"/></marker></defs>
+             <path d="M 60,30 L 100,30" stroke="#6b5a48" stroke-width="1.5" marker-end="url(#arr3)"/>
+             <text x="80" y="24" font-family="var(--mono)" font-size="10" fill="#6b5a48" text-anchor="middle">ε</text>
+             <rect x="20" y="15" width="40" height="30" rx="4" fill="rgba(184,75,34,0.05)" stroke="#b84b22" stroke-width="1.5" stroke-dasharray="4 2"/>
+             <text x="40" y="34" font-family="var(--sans)" font-size="12" fill="#b84b22" font-weight="600" text-anchor="middle">A</text>
+             <rect x="100" y="15" width="40" height="30" rx="4" fill="rgba(184,75,34,0.05)" stroke="#b84b22" stroke-width="1.5" stroke-dasharray="4 2"/>
+             <text x="120" y="34" font-family="var(--sans)" font-size="12" fill="#b84b22" font-weight="600" text-anchor="middle">B</text>
+          </svg>
+        </div>
+      </div>
+
+      <div class="step-card">
+        <div class="step-label">Kleene Star (A<sup>*</sup>)</div>
+        <div class="step-desc">Add start state, ε-loop back, and new accept state</div>
+        <div class="svg-container">
+          <svg width="200" height="90" viewBox="0 0 200 90">
+             <defs><marker id="arr4" viewBox="0 -5 10 10" refX="24" refY="0" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,-5L10,0L0,5" fill="#6b5a48"/></marker></defs>
+             <path d="M 30,60 L 80,60" stroke="#6b5a48" stroke-width="1.5" marker-end="url(#arr4)"/>
+             <path d="M 120,60 L 170,60" stroke="#6b5a48" stroke-width="1.5" marker-end="url(#arr4)"/>
+             <path d="M 30,60 Q 100,10 170,60" stroke="#6b5a48" stroke-width="1.5" fill="none" marker-end="url(#arr4)"/>
+             <path d="M 120,60 Q 100,100 80,60" stroke="#6b5a48" stroke-width="1.5" fill="none" marker-end="url(#arr4)"/>
+             <g font-family="var(--mono)" font-size="10" fill="#6b5a48" text-anchor="middle">
+               <text x="55" y="55">ε</text><text x="145" y="55">ε</text>
+               <text x="100" y="25">ε</text><text x="100" y="85">ε</text>
+             </g>
+             <circle cx="30" cy="60" r="14" fill="rgba(210,153,34,0.15)" stroke="#d29922" stroke-width="1.5"/>
+             <text x="30" y="64" font-family="var(--mono)" font-size="11" fill="#3c3228" text-anchor="middle">s</text>
+             <rect x="80" y="45" width="40" height="30" rx="4" fill="rgba(184,75,34,0.05)" stroke="#b84b22" stroke-width="1.5" stroke-dasharray="4 2"/>
+             <text x="100" y="64" font-family="var(--sans)" font-size="12" fill="#b84b22" font-weight="600" text-anchor="middle">A</text>
+             <circle cx="170" cy="60" r="14" fill="rgba(46,160,67,0.1)" stroke="#3fb950" stroke-width="1.5"/>
+             <circle cx="170" cy="60" r="10" fill="none" stroke="#3fb950" stroke-width="1"/>
+             <text x="170" y="64" font-family="var(--mono)" font-size="11" fill="#3c3228" text-anchor="middle">f</text>
+          </svg>
+        </div>
+      </div>
+  `;
+  operatorsEl.innerHTML = operatorsHTML;
+}
+
+function switchThompsonTab(tab) {
+  document.querySelectorAll('.thompson-tab').forEach(b => b.classList.remove('active'));
+  event.target.classList.add('active');
+  
+  const overviewEl = document.getElementById('thompson-overview');
+  const operatorsEl = document.getElementById('thompson-operators');
+  
+  if (tab === 'overview') {
+    overviewEl.style.display = 'flex';
+    operatorsEl.style.display = 'none';
+  } else {
+    overviewEl.style.display = 'none';
+    operatorsEl.style.display = 'flex';
+  }
+}
+
+// ============================================================
+// RENDER ε-NFA → NFA STEPS
+// ============================================================
+
+function renderEnfaToNfaPanel(nfa) {
+  const el = document.getElementById('enfa-to-nfa-steps');
+  let html = '';
+  
+  for (const step of nfa.steps) {
+    if (step.type === 'closures') {
+      html += `<div class="step-card highlight">
+        <div class="step-label" style="color:var(--amber)">📋 ${step.label}</div>
+        <div class="step-desc">${step.desc}</div>
+        <div class="closure-detail">
+          ${step.closures.map(c => 
+            `<div class="cl-step">ε-closure(q${c.state}) = {${c.closure.map(s=>'q'+s).join(', ')}}${c.isAccept ? ' <span style="color:var(--green)">★ accept</span>' : ''}</div>`
+          ).join('')}
+        </div>
+      </div>`;
+    } else if (step.type === 'transition') {
+      html += `<div class="step-card">
+        <div class="step-label">${step.label}</div>
+        <div class="step-desc" style="font-size:12px">${step.desc}</div>
+      </div>`;
+    } else if (step.type === 'summary') {
+      html += `<div class="step-card highlight-green">
+        <div class="step-label" style="color:var(--green)">✅ ${step.label}</div>
+        <div class="step-desc">${step.desc}</div>
+      </div>`;
+    }
+  }
+  
+  el.innerHTML = html || '<div style="color:var(--text3);font-size:13px">No steps yet.</div>';
+}
+
+// ============================================================
+// RENDER CONVERSION PANEL (NFA → DFA)
+// ============================================================
+
+function buildSubsetSteps(enfa) {
+  const { start, accept, transitions } = enfa;
+  const alphabet = new Set();
+  for (const [, trans] of transitions)
+    for (const { symbol } of trans)
+      if (symbol !== EPSILON) alphabet.add(symbol);
+  const symList = [...alphabet].sort();
+
+  const steps = [];
+  const dfaStateMap = new Map();
+  const dfaTransitions = new Map();
+  let idCounter = 0;
+  const getKey = states => [...states].sort((a, b) => a - b).join(',');
+  const createState = (closure) => {
+    const key = getKey(closure);
+    if (dfaStateMap.has(key)) return dfaStateMap.get(key);
+    const label = letterLabel(idCounter);
+    const info = {
+      id: idCounter,
+      label,
+      key,
+      nfaStates: [...closure].sort((a, b) => a - b),
+      isAccept: closure.includes(accept),
+      acceptanceReason: closure.includes(accept)
+        ? `Includes q${accept}, so ${label} is an accepting DFA state.`
+        : `Does not include q${accept}, so ${label} is not accepting.`
+    };
+    dfaStateMap.set(key, info);
+    idCounter++;
+    return info;
+  };
+
+  const startClosure = [...epsilonClosure([start], transitions)].sort((a, b) => a - b);
+  const startState = createState(startClosure);
+  const worklist = [startState];
+
+  steps.push({
+    type: 'start',
+    dfaState: startState.label,
+    desc: `Start from q${start}, then take every possible ${EPSILON}-move before reading input.`,
+    formulaText: `${startState.label} = ε-closure({q${start}}) = ${formatStateSet(startClosure)}`,
+    closure: startClosure,
+    key: startState.key,
+    isAccept: startState.isAccept,
+    isNew: true,
+    resultLabel: startState.label,
+    acceptanceReason: startState.acceptanceReason
+  });
+
+  while (worklist.length) {
+    const currentState = worklist.shift();
+    const current = currentState.nfaStates;
+    const currentKey = currentState.key;
+    const fromDfaId = currentState.id;
+
+    for (const sym of symList) {
+      const moved = [...move(new Set(current), sym, transitions)].sort((a,b)=>a-b);
+
+      if (moved.length === 0) {
+        steps.push({
+          type: 'dead',
+          fromDfaId,
+          fromLabel: currentState.label,
+          symbol: sym,
+          fromKey: currentKey,
+          desc: `${currentState.label} has no outgoing path on '${sym}', so this branch goes to ∅.`,
+          formulaText: `δ(${currentState.label}, ${sym}) = ε-closure(move(${formatStateSet(current)}, ${sym})) = ∅`
+        });
+        continue;
+      }
+
+      const closure = [...epsilonClosure(moved, transitions)].sort((a,b)=>a-b);
+      const existed = dfaStateMap.has(getKey(closure));
+      const nextState = createState(closure);
+      const isNew = !existed;
+
+      if (isNew) worklist.push(nextState);
+
+      const toDfaId = nextState.id;
+      if (!dfaTransitions.has(fromDfaId)) dfaTransitions.set(fromDfaId, []);
+      if (!dfaTransitions.get(fromDfaId).some(t => t.symbol === sym && t.to === toDfaId)) {
+        dfaTransitions.get(fromDfaId).push({ symbol: sym, to: toDfaId });
+      }
+
+      steps.push({
+        type: 'transition',
+        fromDfaId,
+        fromLabel: currentState.label,
+        toDfaId,
+        toLabel: nextState.label,
+        symbol: sym,
+        fromKey: currentKey,
+        moved,
+        closure,
+        toKey: nextState.key,
+        isNew,
+        isAccept: nextState.isAccept,
+        resultLabel: nextState.label,
+        formulaText: `δ(${currentState.label}, ${sym}) = ε-closure(move(${formatStateSet(current)}, ${sym})) = ${formatStateSet(closure)}`,
+        desc: `From ${currentState.label}, first move on '${sym}' to ${formatStateSet(moved)}, then take ε-closure to get ${nextState.label}.`,
+        acceptanceReason: nextState.acceptanceReason
+      });
+    }
+  }
+
+  const dfaStateList = [...dfaStateMap.values()]
+    .sort((a, b) => a.id - b.id)
+    .map(state => ({
+      id: state.id,
+      key: state.key,
+      label: state.label,
+      nfaStates: [...state.nfaStates],
+      isAccept: state.isAccept,
+      isStart: state.id === 0
+    }));
+
+  return {
+    steps,
+    symList,
+    dfaStateMap,
+    dfaTransitions,
+    dfaStateList,
+    stateCount: dfaStateList.length
+  };
+}
+
+window.hoverConversionStep = function(nfaArray, toDfa, fromDfa) {
+  hoverNfaStates = nfaArray || null;
+  hoverDfaState = toDfa !== undefined ? toDfa : null;
+  hoverDfaFromState = fromDfa !== undefined ? fromDfa : null;
+  render();
+};
+window.clearConversionHover = function() {
+  hoverNfaStates = null; hoverDfaState = null; hoverDfaFromState = null;
+  render();
+};
+
+function renderConversionPanel(enfa, dfa) {
+  const el = document.getElementById('conv-steps');
+  const steps = dfa?.steps || buildSubsetSteps(enfa).steps;
+
+  let html = '';
+  for (const step of steps) {
+    if (step.type === 'start') {
+      const arr = JSON.stringify(step.closure);
+      html += `
+        <div class="step-card highlight-green" onmouseenter="hoverConversionStep(${arr}, 0, null)" onmouseleave="clearConversionHover()" style="cursor:pointer;">
+          <div class="step-label" style="color:var(--cyan)">🔵 DFA Start State ${step.resultLabel}</div>
+          <div class="step-desc">${step.desc}</div>
+          <div class="thompson-code" style="margin-top:0">${step.formulaText}</div>
+          <div class="svg-container" style="border:none; background:transparent; padding:0; justify-content:flex-start; margin-top:12px;">
+            <div style="display:flex; align-items:center; gap:16px;">
+              <div style="flex:1;">
+                 <div style="font-size:10px; color:var(--text3); font-family:var(--mono); margin-bottom:4px; text-transform:uppercase; letter-spacing:1px;">ε-Closure</div>
+                 <div style="border:1.5px dashed #a8895a; border-radius:16px; padding:12px; display:flex; gap:6px; flex-wrap:wrap; background:rgba(181,98,13,0.04);">
+                  ${step.closure.map(s => `<div style="width:26px;height:26px;border-radius:50%;border:1.5px solid #b5620d;display:flex;align-items:center;justify-content:center;font-size:11px;font-family:var(--mono);color:#7b3b1a;background:#fdf8ef;font-weight:600;">q${s}</div>`).join('')}
+                 </div>
+              </div>
+              <div style="color:#8a6040; font-size:24px; font-weight:bold;">→</div>
+              <div style="display:flex; flex-direction:column; align-items:center; gap:4px">
+                 <div style="font-size:10px; color:var(--text3); font-family:var(--mono); text-transform:uppercase; letter-spacing:1px;">DFA State</div>
+                 <div style="width:48px;height:48px;border-radius:50%;border:2px solid ${step.isAccept?'#2d7a3e':'#1b7e87'};display:flex;align-items:center;justify-content:center;font-size:16px;font-family:var(--mono);font-weight:bold;color:#3c3228;background:${step.isAccept?'rgba(45,122,62,0.15)':'rgba(27,126,135,0.15)'}; position:relative; flex-shrink:0;">
+                  ${step.isAccept ? '<div style="position:absolute;inset:3px;border:1.5px solid #2d7a3e;border-radius:50%;"></div>' : ''}
+                  ${step.resultLabel}
+                 </div>
+              </div>
+            </div>
+          </div>
+          <div class="teach-note">${step.acceptanceReason}</div>
+        </div>`;
+    } else if (step.type === 'dead') {
+      html += `
+        <div class="step-card" onmouseenter="hoverConversionStep(null, null, ${step.fromDfaId})" onmouseleave="clearConversionHover()">
+          <div class="step-label">on '<span style="color:var(--accent)">${step.symbol}</span>' from ${step.fromLabel}</div>
+          <div class="step-desc" style="font-style:italic">${step.desc}</div>
+          <div class="thompson-code" style="margin-top:0">${step.formulaText}</div>
+        </div>`;
+    } else if (step.type === 'transition') {
+      const arr = JSON.stringify(step.closure);
+      html += `
+        <div class="step-card${step.isNew?' highlight-green':''}" onmouseenter="hoverConversionStep(${arr}, ${step.toDfaId}, ${step.fromDfaId})" onmouseleave="clearConversionHover()" style="cursor:pointer;">
+          <div class="step-label">on '<span style="color:var(--accent)">${step.symbol}</span>' from ${step.fromLabel} → ${step.toLabel}${step.isNew ? ' <span style="color:var(--green)">(NEW)</span>' : ''}</div>
+          <div class="step-desc" style="font-size:12px">${step.desc}</div>
+          <div class="thompson-code" style="margin-top:0">${step.formulaText}</div>
+          <div class="teach-note">${step.acceptanceReason}</div>
+        </div>`;
+    }
+  }
+
+  el.innerHTML = html || '<div style="color:var(--text3);font-size:13px">No steps yet.</div>';
+}
+
+// ============================================================
+// RENDER EQUIVALENCE MINIMIZATION PANEL
+// ============================================================
+
+function renderEquivPanel(minDfa) {
+  const cmpEl = document.getElementById('equiv-comparison');
+  const reduced = minDfa.dfaStateCount - minDfa.stateCount;
+  cmpEl.style.display = 'block';
+  cmpEl.innerHTML = `
+    <div class="comparison-box">
+      <div class="cmp-col">
+        <div class="cmp-label">DFA States</div>
+        <div class="cmp-val">${minDfa.dfaStateCount}</div>
+      </div>
+      <div class="cmp-col">
+        <div class="cmp-label">Removed</div>
+        <div class="cmp-val ${reduced > 0 ? 'reduced' : ''}">${reduced > 0 ? '−'+reduced : '—'}</div>
+      </div>
+      <div class="cmp-col">
+        <div class="cmp-label">Min-DFA</div>
+        <div class="cmp-val" style="color:var(--purple)">${minDfa.stateCount}</div>
+      </div>
+    </div>
+    ${reduced === 0
+      ? `<div style="font-size:12px;color:var(--text3);font-family:var(--sans);margin-top:8px;font-style:italic">✓ The DFA is already minimal — no redundant states found.</div>`
+      : `<div style="font-size:12px;color:var(--green);font-family:var(--sans);margin-top:8px">✓ Merged ${reduced} equivalent state${reduced>1?'s':''} into fewer partitions.</div>`
+    }
+  `;
+
+  const stepsEl = document.getElementById('equiv-steps');
+  let html = '';
+  for (const step of minDfa.steps) {
+    const partHTML = step.partitions.map((group, gi) => {
+      const tags = group.map(s => {
+        const isAcc = step.acceptSet.includes(s);
+        return `<span class="min-state-tag${isAcc ? ' accepting' : ''}">q${s}${isAcc ? '*' : ''}</span>`;
+      }).join('');
+      return `<div class="min-partition-row"><span class="min-part-label">P${gi}:</span><div class="min-part-group">${tags}</div></div>`;
+    }).join('');
+    
+    html += `
+      <div class="step-card${step.isFinal?' highlight-purple':''}">
+        <div class="step-label">${step.isFinal ? '✅ ' : ''}${step.label}</div>
+        <div class="step-desc">${step.desc}</div>
+        <div class="min-partitions">${partHTML}</div>
+      </div>`;
+  }
+
+  // Mapping diagram
+  html += `<div class="step-card" style="border-color:rgba(123,45,142,0.3)">
+    <div class="step-label" style="color:var(--purple)">Equiv Min-DFA Mapping</div>
+    <div class="step-desc">Each new minimal state represents a partition of equivalent DFA states.</div>
+    <div class="svg-container" style="flex-direction:column; gap:12px; align-items:stretch;">
+    ${minDfa.states.map((s, idx) => `
+      <svg width="240" height="40" viewBox="0 0 240 40" style="margin:0 auto">
+         <defs><marker id="arrEq${idx}" viewBox="0 -3 6 6" refX="12" refY="0" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,-3L6,0L0,3" fill="#6b5a48"/></marker></defs>
+         <rect x="10" y="4" width="100" height="32" rx="4" fill="var(--surface3)" stroke="#4f5761"/>
+         <text x="60" y="24" font-family="var(--mono)" font-size="11" fill="#6b5a48" text-anchor="middle">{${s.origStates.map(os=>'q'+os).join(',')}}</text>
+         <path d="M 115,20 L 165,20" stroke="#6b5a48" stroke-width="1.5" marker-end="url(#arrEq${idx})"/>
+         <circle cx="190" cy="20" r="16" fill="${s.isAccept?'rgba(46,160,67,0.15)':'rgba(123,45,142,0.12)'}" stroke="${s.isAccept?'#3fb950':'#7b2d8e'}" stroke-width="2"/>
+         ${s.isAccept ? '<circle cx="190" cy="20" r="12" fill="none" stroke="#3fb950" stroke-width="1"/>' : ''}
+         <text x="190" y="24" font-family="var(--mono)" font-size="12" fill="#3c3228" font-weight="bold" text-anchor="middle">E${s.id}</text>
+      </svg>`).join('')}
+    </div>
+  </div>`;
+
+  stepsEl.innerHTML = html;
+}
+
+// ============================================================
+// RENDER MYHILL-NERODE MINIMIZATION PANEL
+// ============================================================
+
+function renderMyhillPanel(minDfa) {
+  const cmpEl = document.getElementById('myhill-comparison');
+  const reduced = minDfa.dfaStateCount - minDfa.stateCount;
+  cmpEl.style.display = 'block';
+  cmpEl.innerHTML = `
+    <div class="comparison-box">
+      <div class="cmp-col">
+        <div class="cmp-label">DFA States</div>
+        <div class="cmp-val">${minDfa.dfaStateCount}</div>
+      </div>
+      <div class="cmp-col">
+        <div class="cmp-label">Removed</div>
+        <div class="cmp-val ${reduced > 0 ? 'reduced' : ''}">${reduced > 0 ? '−'+reduced : '—'}</div>
+      </div>
+      <div class="cmp-col">
+        <div class="cmp-label">Min-DFA</div>
+        <div class="cmp-val" style="color:var(--indigo)">${minDfa.stateCount}</div>
+      </div>
+    </div>
+  `;
+
+  const stepsEl = document.getElementById('myhill-steps');
+  let html = '';
+  
+  for (const step of minDfa.steps) {
+    if (step.type === 'base') {
+      // Render the triangular table
+      const tableHTML = renderMyhillTable(step.ids, step.marked, step.accepting);
+      html += `
+        <div class="step-card highlight-indigo">
+          <div class="step-label" style="color:var(--indigo)">📝 ${step.label}</div>
+          <div class="step-desc">${step.desc}</div>
+          ${step.pairs.length > 0 ? `<div class="closure-detail" style="font-size:11px; max-height:120px; overflow-y:auto;">
+            ${step.pairs.map(p => `<div class="cl-step">✗ (q${p.qi}, q${p.qj}) — ${p.reason}</div>`).join('')}
+          </div>` : ''}
+          ${tableHTML}
+        </div>`;
+    } else if (step.type === 'pass') {
+      const tableHTML = renderMyhillTable(step.ids, step.marked, step.accepting);
+      html += `
+        <div class="step-card">
+          <div class="step-label">${step.label}</div>
+          <div class="step-desc">${step.desc}</div>
+          ${step.newMarks.length > 0 ? `<div class="closure-detail" style="font-size:11px; max-height:120px; overflow-y:auto;">
+            ${step.newMarks.map(p => `<div class="cl-step">✗ (q${p.qi}, q${p.qj}) — ${p.reason}</div>`).join('')}
+          </div>` : ''}
+          ${tableHTML}
+        </div>`;
+    } else if (step.type === 'result') {
+      const tableHTML = renderMyhillTable(step.ids, step.marked, step.accepting);
+      html += `
+        <div class="step-card highlight-indigo">
+          <div class="step-label" style="color:var(--indigo)">✅ ${step.label}</div>
+          <div class="step-desc">${step.desc}</div>
+          ${tableHTML}
+        </div>`;
+    }
+  }
+
+  // Mapping diagram
+  html += `<div class="step-card" style="border-color:rgba(74,61,143,0.3)">
+    <div class="step-label" style="color:var(--indigo)">Myhill Min-DFA Mapping</div>
+    <div class="step-desc">Equivalent states merged. Each group becomes one state in the minimal DFA.</div>
+    <div class="svg-container" style="flex-direction:column; gap:12px; align-items:stretch;">
+    ${minDfa.states.map((s, idx) => `
+      <svg width="240" height="40" viewBox="0 0 240 40" style="margin:0 auto">
+         <defs><marker id="arrMy${idx}" viewBox="0 -3 6 6" refX="12" refY="0" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,-3L6,0L0,3" fill="#6b5a48"/></marker></defs>
+         <rect x="10" y="4" width="100" height="32" rx="4" fill="var(--surface3)" stroke="#4f5761"/>
+         <text x="60" y="24" font-family="var(--mono)" font-size="11" fill="#6b5a48" text-anchor="middle">{${s.origStates.map(os=>'q'+os).join(',')}}</text>
+         <path d="M 115,20 L 165,20" stroke="#6b5a48" stroke-width="1.5" marker-end="url(#arrMy${idx})"/>
+         <circle cx="190" cy="20" r="16" fill="${s.isAccept?'rgba(46,160,67,0.15)':'rgba(74,61,143,0.12)'}" stroke="${s.isAccept?'#3fb950':'#4a3d8f'}" stroke-width="2"/>
+         ${s.isAccept ? '<circle cx="190" cy="20" r="12" fill="none" stroke="#3fb950" stroke-width="1"/>' : ''}
+         <text x="190" y="24" font-family="var(--mono)" font-size="12" fill="#3c3228" font-weight="bold" text-anchor="middle">M${s.id}</text>
+      </svg>`).join('')}
+    </div>
+  </div>`;
+
+  stepsEl.innerHTML = html;
+}
+
+function renderMyhillTable(ids, marked, accepting) {
+  const n = ids.length;
+  if (n <= 1) return '<div style="color:var(--text3);font-size:12px">Single state — no pairs to compare.</div>';
+  
+  const getKey = (i, j) => i > j ? `${i},${j}` : `${j},${i}`;
+  const accSet = new Set(accepting);
+  
+  let html = '<div class="myhill-table-wrap"><table class="myhill-table"><tr><th></th>';
+  // Header: all but last
+  for (let j = 0; j < n - 1; j++) {
+    html += `<th>q${ids[j]}${accSet.has(ids[j]) ? '*' : ''}</th>`;
+  }
+  html += '</tr>';
+  
+  // Rows: from second state to last
+  for (let i = 1; i < n; i++) {
+    html += `<tr><th>q${ids[i]}${accSet.has(ids[i]) ? '*' : ''}</th>`;
+    for (let j = 0; j < n - 1; j++) {
+      if (j >= i) {
+        html += '<td class="na"></td>';
+      } else {
+        const k = getKey(ids[i], ids[j]);
+        if (marked[k]) {
+          html += '<td class="marked">✗</td>';
+        } else {
+          html += '<td class="unmarked">≡</td>';
+        }
+      }
+    }
+    html += '</tr>';
+  }
+  html += '</table></div>';
+  return html;
+}
+
+// ============================================================
+// STATS & PROPS
+// ============================================================
+
+function updateStats() {
+  const grid = document.getElementById('stats-grid');
+  const enfa = currentEnfa;
+  const dfa = currentDfa;
+  const nfa = currentNfa;
+  const minE = currentMinEquiv;
+  const minM = currentMinMyhill;
+  
+  const alphabet = new Set();
+  for (const [,trans] of enfa.transitions) for (const {symbol} of trans) if (symbol !== EPSILON) alphabet.add(symbol);
+  const nfaTrans = [...enfa.transitions.values()].reduce((a,b)=>a+b.length,0);
+  const dfaTrans = dfa ? [...dfa.transitions.values()].reduce((a,b)=>a+b.length,0) : '—';
+
+  grid.innerHTML = `
+    <div class="stat-card"><div class="stat-label">ε-NFA STATES</div><div class="stat-value accent">${enfa.stateCount}</div></div>
+    <div class="stat-card"><div class="stat-label">NFA STATES</div><div class="stat-value" style="color:var(--accent2)">${nfa ? nfa.stateCount : '—'}</div></div>
+    <div class="stat-card"><div class="stat-label">DFA STATES</div><div class="stat-value green">${dfa ? dfa.stateCount : '—'}</div></div>
+    <div class="stat-card"><div class="stat-label">EQUIV MIN-DFA</div><div class="stat-value" style="color:var(--purple)">${minE ? minE.stateCount : '—'}</div></div>
+    <div class="stat-card"><div class="stat-label">MYHILL MIN-DFA</div><div class="stat-value" style="color:var(--indigo)">${minM ? minM.stateCount : '—'}</div></div>
+    <div class="stat-card"><div class="stat-label">ALPHABET Σ</div><div class="stat-value" style="font-size:13px;font-family:var(--mono)">{${[...alphabet].join(', ')}}</div></div>
+  `;
+}
+
+function updateProps(re) {
+  const el = document.getElementById('props-list');
+  document.getElementById('props-panel').style.display = 'block';
+
+  const hasStar = re.includes('*');
+  const hasPlus = re.includes('+');
+  const hasOptional = re.includes('?');
+  const hasUnion = re.includes('|');
+  const acceptsEmpty = (() => {
+    if (!currentDfa) return false;
+    const start = currentDfa.states.find(s => s.isStart);
+    return start && start.isAccept;
+  })();
+
+  el.innerHTML = `
+    <div class="prop-row"><span class="prop-key">ACCEPTS ε</span><span class="prop-val ${acceptsEmpty?'yes':'no'}">${acceptsEmpty ? 'Yes' : 'No'}</span></div>
+    <div class="prop-row"><span class="prop-key">USES KLEENE *</span><span class="prop-val ${hasStar?'yes':'no'}">${hasStar ? 'Yes' : 'No'}</span></div>
+    <div class="prop-row"><span class="prop-key">USES PLUS +</span><span class="prop-val ${hasPlus?'yes':'no'}">${hasPlus ? 'Yes' : 'No'}</span></div>
+    <div class="prop-row"><span class="prop-key">USES OPTIONAL ?</span><span class="prop-val ${hasOptional?'yes':'no'}">${hasOptional ? 'Yes' : 'No'}</span></div>
+    <div class="prop-row"><span class="prop-key">USES UNION |</span><span class="prop-val ${hasUnion?'yes':'no'}">${hasUnion ? 'Yes' : 'No'}</span></div>
+    <div class="prop-row"><span class="prop-key">DFA ACCEPT STATES</span><span class="prop-val">${currentDfa ? currentDfa.states.filter(s=>s.isAccept).length : '—'}</span></div>
+    <div class="prop-row"><span class="prop-key">EQUIV = MYHILL?</span><span class="prop-val yes">${currentMinEquiv && currentMinMyhill && currentMinEquiv.stateCount === currentMinMyhill.stateCount ? 'Yes ✓' : 'Checking...'}</span></div>
+  `;
+}
+
+// ============================================================
+// SIMULATE (DFA)
+// ============================================================
+
+function simulate() {
+  const input = document.getElementById('sim-input').value;
+  const resultEl = document.getElementById('sim-result');
+
+  if (!currentDfa) { resultEl.style.display='none'; return; }
+
+  const { transitions, states } = currentDfa;
+  let current = 0;
+  const path = [{ state: current, from: null, to: null }];
+
+  for (const ch of input) {
+    const trans = transitions.get(current) || [];
+    const t = trans.find(t => t.symbol === ch);
+    if (!t) {
+      resultEl.innerHTML = `<div class="sim-result sim-reject"><div class="sim-dot"></div>Rejected — no transition on '${ch}' from q${current}</div>`;
+      resultEl.style.display='block';
+      simulatedPath = null; render();
+      return;
+    }
+    path.push({ state: t.to, from: current, to: t.to });
+    current = t.to;
+  }
+
+  const finalState = states.find(s => s.id === current);
+  const accepted = finalState && finalState.isAccept;
+
+  simulatedPath = path;
+  render();
+
+  if (accepted) {
+    resultEl.innerHTML = `<div class="sim-result sim-accept"><div class="sim-dot"></div>Accepted ✓  (${path.length-1} transitions)</div>`;
+  } else {
+    resultEl.innerHTML = `<div class="sim-result sim-reject"><div class="sim-dot"></div>Rejected — q${current} is not an accept state</div>`;
+  }
+  resultEl.style.display = 'block';
+}
+
+// ============================================================
+// BUILD
+// ============================================================
+
+function buildAutomaton() {
+  const re = document.getElementById('regex-input').value.trim();
+  const errEl = document.getElementById('error-msg');
+  errEl.textContent = '';
+
+  try {
+    validateRegex(re);
+    const postfix = toPostfix(re);
+    if (!postfix.length) throw new Error('Empty expression');
+    currentRegex = re;
+    currentPostfix = postfix;
+
+    // Step 1: RE → ε-NFA (Thompson's)
+    currentEnfa = thompsonBuild(postfix);
+    
+    // Step 2: ε-NFA → NFA (ε-elimination)
+    currentNfa = enfaToNfa(currentEnfa);
+    
+    // Step 3: ε-NFA → DFA (Subset Construction via ε-Closure)
+    currentDfa = nfaToDfa(currentEnfa);
+    
+    // Step 4: DFA → Min-DFA (Equivalence / Partition Refinement)
+    currentMinEquiv = minimizeDfaEquivalence(currentDfa);
+    
+    // Step 5: DFA → Min-DFA (Myhill-Nerode / Table-Filling)
+    currentMinMyhill = minimizeDfaMyhill(currentDfa);
+    
+    simulatedPath = null;
+    
+    let formatted = re.replace(/[*+?]/g, match => `<sup style="color:var(--accent); font-size:0.6em; font-weight:bold;">${match}</sup>`);
+    document.getElementById('formatted-regex-display').innerHTML = `<span>${formatted}</span>`;
+
+    document.getElementById('empty-state').style.display = 'none';
+    document.getElementById('legend').style.display = 'flex';
+    document.getElementById('stats-panel').style.display = 'block';
+    document.getElementById('table-panel').style.display = 'block';
+    document.getElementById('steps-guide-panel').style.display = 'block';
+    document.getElementById('thompson-panel').style.display = 'block';
+    document.getElementById('enfa-to-nfa-panel').style.display = 'block';
+    document.getElementById('conv-panel').style.display = 'block';
+    document.getElementById('equiv-panel').style.display = 'block';
+    document.getElementById('myhill-panel').style.display = 'block';
+    document.getElementById('sim-result').style.display = 'none';
+    
+    const se = document.getElementById('steps-empty-msg');
+    const ae = document.getElementById('analyze-empty-msg');
+    if (se) se.style.display = 'none';
+    if (ae) ae.style.display = 'none';
+    
+    switchSbTab('steps');
+
+    updateStats();
+    updateProps(re);
+    visualizeThompsonConstruction(postfix);
+    renderEnfaToNfaPanel(currentNfa);
+    renderConversionPanel(currentEnfa, currentDfa);
+    renderEquivPanel(currentMinEquiv);
+    renderMyhillPanel(currentMinMyhill);
+    renderGuidedWalkthrough();
+    updateView();
+  } catch (e) {
+    errEl.textContent = '✗ ' + e.message;
+    errEl.style.display = 'block';
+    document.getElementById('regex-input').classList.add('error');
+    setTimeout(() => document.getElementById('regex-input').classList.remove('error'), 1500);
+  }
+}
+
+function updateView() {
+  const badge = document.getElementById('mode-badge');
+  const sub = document.getElementById('mode-subtitle');
+  
+  if (currentMode === 'enfa') {
+    nodePositions = layoutNfa(currentEnfa);
+    edges = buildEdges(currentEnfa);
+    badge.textContent = 'ε-NFA';
+    badge.className = 'mode-badge badge-enfa';
+    sub.textContent = `${currentEnfa.stateCount} states`;
+  } else if (currentMode === 'nfa') {
+    nodePositions = layoutNfa(currentNfa);
+    edges = buildEdges(currentNfa);
+    badge.textContent = 'NFA';
+    badge.className = 'mode-badge badge-nfa';
+    sub.textContent = `${currentNfa.stateCount} states (no ε)`;
+  } else if (currentMode === 'dfa') {
+    nodePositions = layoutDfa(currentDfa);
+    edges = buildDfaEdges(currentDfa);
+    badge.textContent = 'DFA';
+    badge.className = 'mode-badge badge-dfa';
+    sub.textContent = `${currentDfa.stateCount} states`;
+  } else if (currentMode === 'minequiv') {
+    nodePositions = layoutDfa(currentMinEquiv);
+    edges = buildDfaEdges(currentMinEquiv);
+    badge.textContent = 'Min-DFA (Equiv)';
+    badge.className = 'mode-badge badge-mindfa-eq';
+    sub.textContent = `${currentMinEquiv.stateCount} states`;
+  } else if (currentMode === 'minmyhill') {
+    nodePositions = layoutDfa(currentMinMyhill);
+    edges = buildDfaEdges(currentMinMyhill);
+    badge.textContent = 'Min-DFA (Myhill)';
+    badge.className = 'mode-badge badge-mindfa-my';
+    sub.textContent = `${currentMinMyhill.stateCount} states`;
+  }
+  
+  buildTransitionTable();
+  resizeCanvas();
+  zoomFit();
+}
+
+function setMode(mode) {
+  currentMode = mode;
+  
+  const order = ['enfa', 'nfa', 'dfa', 'minequiv', 'minmyhill'];
+  const pipeIds = ['pipe-enfa', 'pipe-nfa', 'pipe-dfa', 'pipe-minequiv', 'pipe-minmyhill'];
+  const arrowIds = ['pipe-arrow-1', 'pipe-arrow-2', 'pipe-arrow-3', 'pipe-arrow-4'];
+  const idx = order.indexOf(mode);
+  
+  pipeIds.forEach((id, i) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.classList.remove('pipe-active', 'pipe-done');
+    if (i < idx) el.classList.add('pipe-done');
+    else if (i === idx) el.classList.add('pipe-active');
+  });
+  
+  arrowIds.forEach((id, i) => {
+    const el = document.getElementById(id);
+    if (el) el.classList.toggle('pipe-done-arrow', i < idx);
+  });
+
+  simulatedPath = null;
+  document.getElementById('sim-result').style.display = 'none';
+  if (currentEnfa) updateView();
+}
+
+function switchSbTab(tab) {
+  ['build','steps','analyze','explain','learn'].forEach(t => {
+    const tabBtn = document.getElementById('sbtab-'+t);
+    const tabPane = document.getElementById('sbpane-'+t);
+    if(tabBtn) tabBtn.classList.toggle('active', t===tab);
+    if(tabPane) tabPane.classList.toggle('active', t===tab);
+  });
+}
+
+function loadExample(re) {
+  try {
+    const ri = document.getElementById('regex-input');
+    const bb = document.getElementById('build-btn');
+    if(ri) ri.value = re;
+    if(bb) bb.classList.remove('retracted');
+    buildAutomaton();
+  } catch (e) {
+    const err = document.getElementById('error-msg');
+    if(err) {
+      err.textContent = 'Startup error: ' + e.message;
+      err.style.display = 'block';
+    }
+  }
+}
+
+document.getElementById('regex-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') buildAutomaton();
+});
+document.getElementById('regex-input').addEventListener('input', e => {
+  let re = e.target.value;
+  const btn = document.getElementById('build-btn');
+  if (re.trim().length > 0) btn.classList.remove('retracted');
+  else btn.classList.add('retracted');
+
+  if(!re.trim()) re = "(a|b)*abb";
+  let formatted = re.replace(/[*+?]/g, match => `<sup style="color:var(--accent); font-size:0.6em; font-weight:bold;">${match}</sup>`);
+  document.getElementById('formatted-regex-display').innerHTML = `<span>${formatted}</span>`;
+});
+
+document.getElementById('sim-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') simulate();
+});
+
+resizeCanvas();
+setTimeout(() => loadExample('(a|b)*abb'), 100);
+
+// ============================================================
+// HAND-DRAW AUTOMATON + NFA→REGEX (STATE ELIMINATION)
+// ============================================================
+
+let handModeActive = false;
+let handStates = [];
+let handEdges  = [];
+let handSelected = null;
+let handMouseDownState = null;
+let handDragStart = null;
+let handDragPos   = null;
+let handNextId    = 0;
+let handPromptPending = null;
+
+const HAND_R = 28;
+
+function setHandMode(on) {
+  handModeActive = on;
+  document.getElementById('hand-tab-off').classList.toggle('active', !on);
+  document.getElementById('hand-tab-on').classList.toggle('active', on);
+  document.getElementById('hand-controls').style.display = on ? 'block' : 'none';
+  document.getElementById('hand-selected-panel').style.display = 'none';
+  handSelected = null;
+  if (on) {
+    isPanning = false;
+    renderHand();
+  } else {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    if (currentEnfa) render();
+    else { document.getElementById('empty-state').style.display = 'flex'; }
+  }
+}
+
+canvas.addEventListener('mousedown', e => {
+  if (!handModeActive) return;
+  if (e.button !== 0) return;
+  const {x, y} = handCanvasPos(e);
+  const hit = handStateAt(x, y);
+  handMouseDownState = hit ? hit.id : null;
+  handDragStart = {x, y};
+  handDragPos   = {x, y};
+});
+
+canvas.addEventListener('mousemove', e => {
+  if (!handModeActive) return;
+  const {x, y} = handCanvasPos(e);
+  handDragPos = {x, y};
+  renderHand();
+});
+
+canvas.addEventListener('mouseup', e => {
+  if (!handModeActive) return;
+  const {x, y} = handCanvasPos(e);
+  const moved = handDragStart && Math.hypot(x - handDragStart.x, y - handDragStart.y) > 8;
+  const hitState = handStateAt(x, y);
+
+  if (handMouseDownState !== null) {
+    if (moved) {
+      if (hitState && hitState.id !== handMouseDownState) {
+        showHandPrompt(handMouseDownState, hitState.id, 'Add transition');
+      } else if (hitState && hitState.id === handMouseDownState) {
+        showHandPrompt(handMouseDownState, handMouseDownState, 'Add self-loop');
+      } else {
+        const s = handStates.find(s => s.id === handMouseDownState);
+        if (s) { s.x = x; s.y = y; }
+        renderHand();
+      }
+    } else {
+      handSelected = (handSelected === handMouseDownState) ? null : handMouseDownState;
+      updateHandSelectedPanel();
+      renderHand();
+    }
+  } else if (!moved) {
+    if (!hitState) {
+      handStates.push({ id: handNextId++, x, y, isStart: handStates.length === 0, isAccept: false });
+      renderHand();
+    }
+  }
+
+  handMouseDownState = null;
+  handDragStart = null;
+});
+
+canvas.addEventListener('dblclick', e => {
+  if (!handModeActive) return;
+  const {x, y} = handCanvasPos(e);
+  const s = handStateAt(x, y);
+  if (s) { s.isAccept = !s.isAccept; renderHand(); }
+});
+
+canvas.addEventListener('contextmenu', e => {
+  if (!handModeActive) return;
+  e.preventDefault();
+  const {x, y} = handCanvasPos(e);
+  const s = handStateAt(x, y);
+  if (s) {
+    handEdges = handEdges.filter(ed => ed.from !== s.id && ed.to !== s.id);
+    handStates = handStates.filter(st => st.id !== s.id);
+    if (handSelected === s.id) handSelected = null;
+    updateHandSelectedPanel();
+    renderHand();
+  }
+});
+
+function showHandPrompt(fromId, toId, title) {
+  handPromptPending = {from: fromId, to: toId};
+  document.getElementById('hand-prompt-title').textContent = title;
+  document.getElementById('hand-prompt-input').value = '';
+  document.getElementById('hand-prompt-overlay').style.display = 'flex';
+  setTimeout(() => document.getElementById('hand-prompt-input').focus(), 50);
+}
+
+document.getElementById('hand-prompt-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') handPromptConfirm();
+  if (e.key === 'Escape') handPromptCancel();
+});
+
+function handPromptConfirm() {
+  const raw = document.getElementById('hand-prompt-input').value.trim();
+  if (raw && handPromptPending) {
+    const labels = raw.split(',').map(s => s.trim()).filter(Boolean);
+    for (const lbl of labels) {
+      const sym = lbl === 'e' || lbl === 'eps' ? 'ε' : lbl;
+      const existing = handEdges.find(ed => ed.from === handPromptPending.from && ed.to === handPromptPending.to && ed.label === sym);
+      if (!existing) handEdges.push({from: handPromptPending.from, to: handPromptPending.to, label: sym});
+    }
+    renderHand();
+  }
+  document.getElementById('hand-prompt-overlay').style.display = 'none';
+  handPromptPending = null;
+}
+
+function handPromptCancel() {
+  document.getElementById('hand-prompt-overlay').style.display = 'none';
+  handPromptPending = null;
+}
+
+function updateHandSelectedPanel() {
+  const panel = document.getElementById('hand-selected-panel');
+  if (handSelected === null) { panel.style.display = 'none'; return; }
+  const s = handStates.find(st => st.id === handSelected);
+  if (!s) { panel.style.display = 'none'; return; }
+  panel.style.display = 'block';
+  document.getElementById('hand-sel-label').textContent =
+    `q${s.id}${s.isStart ? ' [start]' : ''}${s.isAccept ? ' [accept]' : ''}`;
+}
+
+function handToggleStart() {
+  const s = handStates.find(st => st.id === handSelected);
+  if (!s) return;
+  if (!s.isStart) handStates.forEach(st => st.isStart = false);
+  s.isStart = !s.isStart;
+  updateHandSelectedPanel(); renderHand();
+}
+function handToggleAccept() {
+  const s = handStates.find(st => st.id === handSelected);
+  if (!s) return;
+  s.isAccept = !s.isAccept;
+  updateHandSelectedPanel(); renderHand();
+}
+function handDeleteSelected() {
+  if (handSelected === null) return;
+  handEdges = handEdges.filter(ed => ed.from !== handSelected && ed.to !== handSelected);
+  handStates = handStates.filter(st => st.id !== handSelected);
+  handSelected = null;
+  updateHandSelectedPanel(); renderHand();
+}
+function handClear() {
+  handStates = []; handEdges = []; handSelected = null; handNextId = 0;
+  updateHandSelectedPanel();
+  document.getElementById('hand-result').style.display = 'none';
+  renderHand();
+}
+
+function handCanvasPos(e) {
+  const rect = canvas.getBoundingClientRect();
+  return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+}
+function handStateAt(x, y) {
+  for (let i = handStates.length - 1; i >= 0; i--) {
+    const s = handStates[i];
+    if (Math.hypot(x - s.x, y - s.y) <= HAND_R) return s;
+  }
+  return null;
+}
+
+function renderHand() {
+  if (!handModeActive) return;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  ctx.save();
+  ctx.strokeStyle = 'rgba(196,170,122,0.15)';
+  ctx.lineWidth = 1;
+  for (let x = 0; x < canvas.width; x += 28) { ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,canvas.height); ctx.stroke(); }
+  for (let y = 0; y < canvas.height; y += 28) { ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(canvas.width,y); ctx.stroke(); }
+  ctx.restore();
+
+  const edgeMap = new Map();
+  for (const e of handEdges) {
+    const fwd  = `${e.from}-${e.to}`;
+    if (!edgeMap.has(fwd)) edgeMap.set(fwd, {from:e.from, to:e.to, labels:[]});
+    edgeMap.get(fwd).labels.push(e.label);
+  }
+
+  for (const [, eg] of edgeMap) {
+    const s1 = handStates.find(s => s.id === eg.from);
+    const s2 = handStates.find(s => s.id === eg.to);
+    if (!s1 || !s2) continue;
+    const label = eg.labels.join(',');
+    const isSelf = eg.from === eg.to;
+    const hasReverse = edgeMap.has(`${eg.to}-${eg.from}`);
+    drawHandEdge(s1.x, s1.y, s2.x, s2.y, label, isSelf, hasReverse);
+  }
+
+  if (handMouseDownState !== null && handDragStart && handDragPos) {
+    const moved = Math.hypot(handDragPos.x - handDragStart.x, handDragPos.y - handDragStart.y) > 8;
+    if (moved) {
+      const s = handStates.find(st => st.id === handMouseDownState);
+      if (s) {
+        ctx.save();
+        ctx.strokeStyle = '#7b3b1a'; ctx.lineWidth = 2;
+        ctx.setLineDash([6, 4]);
+        ctx.beginPath(); ctx.moveTo(s.x, s.y); ctx.lineTo(handDragPos.x, handDragPos.y); ctx.stroke();
+        ctx.restore();
+      }
+    }
+  }
+
+  for (const s of handStates) {
+    const isSelected = s.id === handSelected;
+
+    if (s.isStart) {
+      ctx.save();
+      ctx.strokeStyle = '#b5620d'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(s.x - HAND_R - 32, s.y); ctx.lineTo(s.x - HAND_R, s.y); ctx.stroke();
+      drawHandArrow(s.x - HAND_R, s.y, 0, '#b5620d');
+      ctx.restore();
+    }
+
+    ctx.beginPath(); ctx.arc(s.x, s.y, HAND_R, 0, Math.PI*2);
+    ctx.fillStyle = s.isAccept ? 'rgba(45,106,79,0.12)' : s.isStart ? 'rgba(181,98,13,0.1)' : '#fdf8ef';
+    ctx.fill();
+    ctx.lineWidth = isSelected ? 3 : 1.8;
+    ctx.strokeStyle = isSelected ? '#7b3b1a' : s.isAccept ? '#2d6a4f' : s.isStart ? '#b5620d' : '#a8895a';
+    ctx.stroke();
+
+    if (s.isAccept) {
+      ctx.beginPath(); ctx.arc(s.x, s.y, HAND_R - 5, 0, Math.PI*2);
+      ctx.strokeStyle = '#2d6a4f'; ctx.lineWidth = 1.2; ctx.stroke();
+    }
+
+    ctx.fillStyle = '#2c1f0e';
+    ctx.font = "bold 13px 'Inconsolata', monospace";
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(`q${s.id}`, s.x, s.y);
+  }
+}
+
+function drawHandEdge(x1, y1, x2, y2, label, isSelf, hasReverse) {
+  ctx.save();
+  ctx.strokeStyle = '#8a6040'; ctx.lineWidth = 1.6;
+
+  if (isSelf) {
+    const lx = x1, ly = y1 - HAND_R * 2.2;
+    const lr = HAND_R * 1.5;
+    ctx.beginPath(); ctx.arc(lx, ly, lr, 0, Math.PI*2); ctx.stroke();
+    const arrowAngle = Math.atan2(ly - y1, lx - x1) + 0.6;
+    drawHandArrow(x1 + Math.cos(arrowAngle)*HAND_R, y1 + Math.sin(arrowAngle)*HAND_R, arrowAngle + Math.PI/2, '#8a6040');
+    drawHandLabel(lx, ly - lr - 10, label);
+  } else {
+    const dx = x2-x1, dy = y2-y1, dist = Math.sqrt(dx*dx+dy*dy)||1;
+    const nx = -dy/dist, ny = dx/dist;
+    const mag = hasReverse ? 55 : 0;
+    const cpx = (x1+x2)/2 + nx*mag, cpy = (y1+y2)/2 + ny*mag;
+    const sdx = cpx-x1, sdy = cpy-y1, sl = Math.sqrt(sdx*sdx+sdy*sdy)||1;
+    const sx = x1 + sdx/sl*HAND_R, sy = y1 + sdy/sl*HAND_R;
+    const edx = x2-cpx, edy = y2-cpy, el = Math.sqrt(edx*edx+edy*edy)||1;
+    const ex = x2 - edx/el*HAND_R, ey = y2 - edy/el*HAND_R;
+    ctx.beginPath(); ctx.moveTo(sx, sy); ctx.quadraticCurveTo(cpx, cpy, ex, ey); ctx.stroke();
+    drawHandArrow(ex, ey, Math.atan2(ey-cpy, ex-cpx), '#8a6040');
+    const lx = 0.25*sx+0.5*cpx+0.25*ex, ly = 0.25*sy+0.5*cpy+0.25*ey;
+    drawHandLabel(lx, ly, label);
+  }
+  ctx.restore();
+}
+
+function drawHandArrow(x, y, angle, color) {
+  const sz = 8;
+  ctx.save(); ctx.translate(x, y); ctx.rotate(angle);
+  ctx.fillStyle = color;
+  ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(-sz,-sz*0.45); ctx.lineTo(-sz,sz*0.45); ctx.closePath(); ctx.fill();
+  ctx.restore();
+}
+
+function drawHandLabel(x, y, label) {
+  const fs = 14;
+  ctx.font = `${fs}px 'JetBrains Mono', monospace`;
+  const w = ctx.measureText(label).width + 8;
+  ctx.fillStyle = '#fdf8ef';
+  ctx.fillRect(x-w/2, y-fs*0.8, w, fs*1.4);
+  ctx.fillStyle = label === 'ε' || label.includes('ε') ? '#a8895a' : '#7b3b1a';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(label, x, y + fs*0.1);
+}
+
+// ---- NFA → Regex via State Elimination (GNFA) ----
+function handConvertToRegex() {
+  const starts  = handStates.filter(s => s.isStart);
+  const accepts = handStates.filter(s => s.isAccept);
+  if (starts.length === 0)  { alert('Please mark a start state (select a state → Toggle Start)'); return; }
+  if (accepts.length === 0) { alert('Please mark at least one accept state (double-click a state to toggle accept)'); return; }
+
+  const QS = 'qs', QA = 'qa';
+  const allIds = handStates.map(s => s.id);
+  const trans = new Map();
+  const getTr = (a, b) => {
+    if (!trans.has(a)) return null;
+    return trans.get(a).get(b) ?? null;
+  };
+  const setTr = (a, b, r) => {
+    if (!trans.has(a)) trans.set(a, new Map());
+    trans.get(a).set(b, r);
+  };
+
+  const rawEdges = new Map();
+  for (const e of handEdges) {
+    const key = `${e.from}|${e.to}`;
+    const lbl = e.label === 'ε' ? '' : e.label;
+    rawEdges.set(key, rxUnion(rawEdges.get(key) ?? null, lbl));
+  }
+  for (const [key, r] of rawEdges) {
+    const [f, t] = key.split('|').map(Number);
+    setTr(f, t, r);
+  }
+
+  for (const s of starts) setTr(QS, s.id, rxUnion(getTr(QS, s.id), ''));
+  for (const s of accepts) setTr(s.id, QA, rxUnion(getTr(s.id, QA), ''));
+
+  let remaining = [QS, ...allIds, QA];
+  for (const q of allIds) {
+    const others = remaining.filter(id => id !== q);
+    for (const qi of others) {
+      for (const qj of others) {
+        const r1 = getTr(qi, q);
+        const rl = getTr(q, q);
+        const r2 = getTr(q, qj);
+        if (r1 === null || r2 === null) continue;
+        const mid = rxConcat(r1, rl, r2);
+        setTr(qi, qj, rxUnion(getTr(qi, qj), mid));
+      }
+    }
+    remaining = others;
+  }
+
+  let result = getTr(QS, QA);
+  if (result === null) result = '∅';
+  if (result === '') result = 'ε';
+
+  document.getElementById('hand-result').style.display = 'block';
+  document.getElementById('hand-regex-output').textContent = result;
+}
+
+function handLoadIntoBuilder() {
+  const re = document.getElementById('hand-regex-output').textContent;
+  if (!re || re === '∅') return;
+  setHandMode(false);
+  document.getElementById('regex-input').value = re;
+  buildAutomaton();
+  document.querySelector('.sidebar').scrollTop = 0;
+}
+
+function rxUnion(a, b) {
+  if (a === null) return b;
+  if (b === null) return a;
+  if (a === b)    return a;
+  return `${a}|${b}`;
+}
+
+function rxStar(r) {
+  if (r === null) return null;
+  if (r === '' || r === 'ε') return null;
+  if (/^[a-zA-Z0-9]$/.test(r)) return `${r}*`;
+  return `(${r})*`;
+}
+
+function rxConcat(r1, rl, r2) {
+  if (r1 === null || r2 === null) return null;
+  const parts = [];
+  const push = (r) => {
+    if (r === '' || r === 'ε') return;
+    parts.push(r.includes('|') ? `(${r})` : r);
+  };
+  push(r1);
+  const star = rxStar(rl);
+  if (star !== null) push(star);
+  push(r2);
+  if (parts.length === 0) return '';
+  return parts.join('');
+}
+
+</script>
+</body>
+</html>
